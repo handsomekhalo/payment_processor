@@ -2,8 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils.translation import gettext_lazy as _
-from . import constants  # define constants.ADMIN, MERCHANT, CUSTOMER, etc.
-
+from . import constants
 
 class UserType(models.Model):
     """
@@ -17,30 +16,33 @@ class UserType(models.Model):
     def __str__(self):
         return self.name
 
-
 class UserManager(BaseUserManager):
-    def create_user(self, email, password, first_name, last_name, **extra_fields):
+    def create_user(self, email, password, **extra_fields):
         if not email:
             raise ValueError(_('The Email must be set'))
+        
         email = self.normalize_email(email)
-        extra_fields.setdefault('is_active', True)
-        user = self.model(email=email, first_name=first_name, last_name=last_name, **extra_fields)
+        user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
         return user
 
     def create_superuser(self, email, password, **extra_fields):
+        # Ensure the superuser flags are set
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        extra_fields.setdefault('is_active', True)
+
+        # Handle the case where the user type doesn't exist.
         try:
-            user_type_id = UserType.objects.get(name=constants.ADMIN).id
+            # Get the UserType ID for 'ADMIN'
+            admin_user_type = UserType.objects.get(name=constants.ADMIN)
+            extra_fields.setdefault('user_type', admin_user_type)
         except ObjectDoesNotExist:
             raise ValueError(_(f'{constants.ADMIN} role not found'))
-        extra_fields.update({
-            'is_staff': True,
-            'is_superuser': True,
-            'user_type_id': user_type_id
-        })
-        return self.create_user(email, password, first_name="Super", last_name="Admin", **extra_fields)
-
+        
+        # Call the base create_user method, passing all extra fields
+        return self.create_user(email, password, **extra_fields)
 
 class User(AbstractUser):
     """
@@ -49,8 +51,13 @@ class User(AbstractUser):
     username = None
     email = models.EmailField(unique=True)
     user_type = models.ForeignKey(UserType, on_delete=models.CASCADE)
-    user_created_by = models.ForeignKey('self', null=True, blank=True,
-                                        on_delete=models.SET_NULL, related_name='created_users')
+    user_created_by = models.ForeignKey(
+        'self', 
+        null=True, 
+        blank=True,
+        on_delete=models.SET_NULL, 
+        related_name='created_users'
+    )
 
     objects = UserManager()
     USERNAME_FIELD = 'email'
@@ -59,7 +66,6 @@ class User(AbstractUser):
     def __str__(self):
         return f"{self.email} ({self.user_type})"
 
-
 class Profile(models.Model):
     """
     Profile stores identity, contact, and compliance details for KYC/AML.
@@ -67,7 +73,6 @@ class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     
     # Personal details (Customers & Admins)
-    id_number = models.CharField(max_length=13, null=True, blank=True)
     passport_number = models.CharField(max_length=255, null=True, blank=True)
     phone_number = models.CharField(max_length=20)
     
@@ -93,7 +98,6 @@ class Profile(models.Model):
 
     def __str__(self):
         return f"{self.user.email} Profile"
-
 
 class Province(models.Model):
     """

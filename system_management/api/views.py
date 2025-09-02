@@ -1,6 +1,3 @@
-
-
-
 import datetime
 from datetime import datetime
 import json
@@ -8,6 +5,7 @@ import random
 from requests import Response
 from system_management import constants
 # from system_management.api.serializers import DeleteUserSerializer, GetAlltUserModelSerializer, RegisterSerializer, UserModelSerializer, UserTypeModelSerializer, UserUpdateSerializer,CreateUserSerializer
+from system_management.api.serializers import RegisterSerializer, UserModelSerializer
 from system_management.models import Profile, User, UserType
 from rest_framework.permissions import AllowAny
 from rest_framework.authtoken.models import Token
@@ -124,3 +122,32 @@ def login_api(request):
             'message': constants.INVALID_REQUEST_METHOD
         }
         return Response(data, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def register_user_api(request):
+    """
+    Register a new user (Customer / Merchant / Admin)
+    """
+    serializer = RegisterSerializer(data=request.data)
+
+    if serializer.is_valid():
+        user = serializer.save()
+        return Response(
+            {
+                "status": "success",
+                "user_id": user.id,
+                "email": user.email,
+                "user_type": user.user_type.name,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    return Response(
+        {
+            "status": "error",
+            "errors": serializer.errors,
+        },
+        status=status.HTTP_400_BAD_REQUEST,
+    )

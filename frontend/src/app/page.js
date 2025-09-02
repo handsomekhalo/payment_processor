@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import LoginPage from './login/login';
+import RegisterPage from './register/register';
 // import Dashboard from './Components/System_Management_Component/dashboard/dashboard';
 
 export default function Home() {
@@ -27,7 +28,7 @@ export default function Home() {
           </>
         ) : (
           <>
-            {/* <RegisterPage /> */}
+            <RegisterPage />
             <p className="text-sm mt-4">
               Already have an account?{' '}
               <button

@@ -5,7 +5,7 @@ import random
 from requests import Response
 from system_management import constants
 # from system_management.api.serializers import DeleteUserSerializer, GetAlltUserModelSerializer, RegisterSerializer, UserModelSerializer, UserTypeModelSerializer, UserUpdateSerializer,CreateUserSerializer
-from system_management.api.serializers import RegisterSerializer, UserModelSerializer
+from system_management.api.serializers import GetAlltUserModelSerializer, RegisterSerializer, UserModelSerializer, UserTypeModelSerializer
 from system_management.models import Profile, User, UserType
 from rest_framework.permissions import AllowAny
 from rest_framework.authtoken.models import Token
@@ -151,3 +151,93 @@ def register_user_api(request):
         },
         status=status.HTTP_400_BAD_REQUEST,
     )
+
+
+@permission_classes([AllowAny])
+@api_view(['GET'])
+def get_user_types_api(request):
+    """
+    Get all user types in the database
+
+    Args:
+        request:
+    Returns:
+        Response:
+            data:
+                status:
+                message:
+                data:
+            status code:
+    """
+ 
+    if request.method == 'GET':
+
+        user_types = UserType.objects.all()
+        serializer = UserTypeModelSerializer(user_types, many=True)
+
+        try:
+            data = {
+                'status': "success",
+                'user_types': serializer.data
+            }
+            return Response(data, status=status.HTTP_200_OK)
+
+        except KeyError:
+            data = {
+                'status': "error",
+                'message': "Error during getting user types."
+            }
+            return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    else:
+        data = {
+            'status': "error",
+            'message': constants.INVALID_REQUEST_METHOD
+        }
+        return Response(data, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
+
+@api_view(['GET'])
+def get_users_api(request):
+
+    """
+    Get all users api
+
+    Args:
+        request:
+    Returns:
+        Response:
+            data:
+                - status
+                - message
+                - data
+            status code:
+    """
+    if request.method == "GET":
+        users = User.objects.all()
+
+        serializer = GetAlltUserModelSerializer(users, many=True).data
+
+        try:
+            data = {
+                'status': "success",
+                'users': serializer
+            }
+            return Response(data, status=status.HTTP_200_OK)
+
+        except KeyError:
+            data = {
+                'status': "error",
+                'message': "Error during getting users."
+            }
+            return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    else:
+        data = {
+            'status': "error",
+            'message': "Invalid request method."
+        }
+        return Response(data, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+

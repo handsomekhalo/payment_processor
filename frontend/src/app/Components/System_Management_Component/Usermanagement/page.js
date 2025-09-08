@@ -4,11 +4,11 @@ import React, { useEffect, useState } from 'react';
 import Sidebar from '../dashboard/SideBar/sidebar';
 import UserTable from './usermanagement';
 import { useAuth } from '../../../../../AuthContext';
+import Navbar from '../dashboard/SideBar/navheader';
 import backendApi from '../../../../../utils/backendApi';
-// import Navbar from '../dashboard/SideBar/navheader';
-// import EditUserModal from './edit_user_modalr';
-// import CreateUserModal from './Create_User_Modal';
-// import DeleteUserModal from './delete_user_modal';
+import EditUserModal from './edit_user_modalr';
+import CreateUserModal from './Create_User_Modal';
+import DeleteUserModal from './delete_user_modal';
 
 
 const UserManagement = () => {
@@ -286,13 +286,13 @@ const handleDelete = (user) => {
       </button>
 
 
-        {/* <EditUserModal
+        <EditUserModal
           user={selectedUser}
           isOpen={isModalOpen}
           onClose={handleCloseModal} // This was wrong: onClose={() => setModalOpen(false)}
           onSave={handleSaveUser}
           roles={roles}
-        /> */}
+        />
         
         {error && <div className="bg-red-100 p-3 mb-4 text-red-700 rounded">{error}</div>}
         <UserTable
@@ -313,27 +313,27 @@ const handleDelete = (user) => {
         />
 
 
-        {/* <CreateUserModal
+        <CreateUserModal
   isOpen={isCreateModalOpen}
   onClose={() => setIsCreateModalOpen(false)}
   onSave={handleCreateUser}
   roles={roles}
-/> */}
+/>
 
-{/* <DeleteUserModal
+<DeleteUserModal
   isOpen={isDeleteModalOpen}
   onClose={() => setIsDeleteModalOpen(false)}
   onDelete={handleConfirmDelete}
   userEmail={userToDelete?.email || ''}
   loading={deleting}
-/> */}
-{/* <DeleteUserModal
+/>
+<DeleteUserModal
   isOpen={isDeleteModalOpen}
   onClose={() => setIsDeleteModalOpen(false)}
   onDelete={handleConfirmDelete}             // receives email from modal
   userEmail={userToDelete?.email || ''}      // pulls email from selected user
   loading={deleting}
-/> */}
+/>
 
       </div>
 

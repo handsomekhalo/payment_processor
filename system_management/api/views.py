@@ -5,7 +5,7 @@ import random
 from requests import Response
 from system_management import constants
 # from system_management.api.serializers import DeleteUserSerializer, GetAlltUserModelSerializer, RegisterSerializer, UserModelSerializer, UserTypeModelSerializer, UserUpdateSerializer,CreateUserSerializer
-from system_management.api.serializers import GetAlltUserModelSerializer, RegisterSerializer, UserModelSerializer, UserTypeModelSerializer
+from system_management.api.serializers import GetAlltUserModelSerializer, CreateUserSerializer, UserModelSerializer, UserTypeModelSerializer
 from system_management.models import Profile, User, UserType
 from rest_framework.permissions import AllowAny
 from rest_framework.authtoken.models import Token
@@ -130,7 +130,7 @@ def register_user_api(request):
     """
     Register a new user (Customer / Merchant / Admin)
     """
-    serializer = RegisterSerializer(data=request.data)
+    serializer = CreateUserSerializer(data=request.data)
 
     if serializer.is_valid():
         user = serializer.save()
@@ -241,3 +241,125 @@ def get_users_api(request):
         return Response(data, status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
+
+@api_view(["POST"])
+@permission_classes((AllowAny,))
+def create_users_api(request):
+    """
+    Create user API for user registration
+    Args:
+        request: HTTP request containing user data
+    Returns:
+        Response:
+            data:
+                - status
+                - message
+                - user (optional)
+                - token (optional)
+            status code:
+    """
+    if request.method == "POST":
+        try:
+            # Parse request body
+            if request.content_type == 'application/json':
+                body = json.loads(request.body)
+            else:
+                body = request.data
+
+            # Validate required fields
+            required_fields = [
+                'email', 'password', 'confirm_password', 'first_name', 
+                'last_name', 'user_type_id', 
+            ]
+            
+            missing_fields = [field for field in required_fields if not body.get(field)]
+            if missing_fields:
+                data = {
+                    "status": "error",
+                    "message": f"Missing required fields: {', '.join(missing_fields)}"
+                }
+                return Response(data, status=status.HTTP_400_BAD_REQUEST)
+
+            # Create serializer instance
+            serializer = CreateUserSerializer(data=body)
+            
+            if serializer.is_valid():
+                # Create user
+                user = serializer.save()
+                
+                # Set user_created_by if provided in request
+                if body.get('user_created_by'):
+                    try:
+                        created_by_user = User.objects.get(id=body['user_created_by'])
+                        user.user_created_by = created_by_user
+                        user.save()
+                    except User.DoesNotExist:
+                        pass  # Continue without setting created_by if user doesn't exist
+                
+                # Generate token for the new user
+                token, _ = Token.objects.get_or_create(user=user)
+                
+                # Generate OTP (if needed)
+                otp = ''.join([str(random.randint(0, 9)) for _ in range(5)])
+                
+                # Get profile information
+                try:
+                    profile = Profile.objects.get(user_id=user.id)
+                    first_login = profile.first_login
+                    user_number = profile.phone_number
+                except Profile.DoesNotExist:
+                    first_login = True
+                    user_number = body.get('phone_number', '')
+                
+                # Update last login
+                user.last_login = datetime.now()
+                user.save()
+                
+                # Serialize user data
+                user_serializer = UserModelSerializer(user)
+                
+                response_data = {
+                    "status": "success",
+                    "message": "User created successfully",
+                    "token": token.key,
+                    "first_login": first_login,
+                    "user_number": user_number,
+                    "new_pin": otp,
+                    "user": user_serializer.data
+                }
+                
+                return Response(response_data, status=status.HTTP_201_CREATED)
+            
+            else:
+                # Return validation errors
+                error_messages = []
+                for field, errors in serializer.errors.items():
+                    for error in errors:
+                        error_messages.append(f"{field}: {error}")
+                
+                data = {
+                    "status": "error",
+                    "message": "; ".join(error_messages)
+                }
+                return Response(data, status=status.HTTP_400_BAD_REQUEST)
+                
+        except json.JSONDecodeError:
+            data = {
+                "status": "error",
+                "message": "Invalid JSON format"
+            }
+            return Response(data, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            data = {
+                "status": "error",
+                "message": f"An error occurred: {str(e)}"
+            }
+            return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    else:
+        data = {
+            'status': "error",
+            'message': constants.INVALID_REQUEST_METHOD
+        }
+        return Response(data, status=status.HTTP_405_METHOD_NOT_ALLOWED)

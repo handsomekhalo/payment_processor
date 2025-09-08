@@ -138,7 +138,7 @@ class UserModelSerializer(serializers.ModelSerializer):
         )
 
 
-class RegisterSerializer(serializers.Serializer):
+class CreateUserSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=50)
     last_name = serializers.CharField(max_length=50)
     email = serializers.EmailField()
@@ -148,10 +148,10 @@ class RegisterSerializer(serializers.Serializer):
 
     # Optional profile fields
     phone_number = serializers.CharField(max_length=20, required=False)
-    street_address = serializers.CharField(max_length=255, required=False)
-    city = serializers.CharField(max_length=255, required=False)
-    province = serializers.CharField(max_length=255, required=False)
-    postal_code = serializers.CharField(max_length=10, required=False)
+    # street_address = serializers.CharField(max_length=255, required=False)
+    # city = serializers.CharField(max_length=255, required=False)
+    # province = serializers.CharField(max_length=255, required=False)
+    # postal_code = serializers.CharField(max_length=10, required=False)
 
     def validate(self, data):
         if data["password"] != data["confirm_password"]:
@@ -162,10 +162,10 @@ class RegisterSerializer(serializers.Serializer):
         # Pop profile-related fields
         profile_fields = {
             "phone_number": validated_data.pop("phone_number", None),
-            "street_address": validated_data.pop("street_address", None),
-            "city": validated_data.pop("city", None),
-            "province": validated_data.pop("province", None),
-            "postal_code": validated_data.pop("postal_code", ""),
+            # "street_address": validated_data.pop("street_address", None),
+            # "city": validated_data.pop("city", None),
+            # "province": validated_data.pop("province", None),
+            # "postal_code": validated_data.pop("postal_code", ""),
         }
 
         # Remove confirm_password (not needed for User)

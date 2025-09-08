@@ -5,7 +5,7 @@ import random
 from requests import Response
 from system_management import constants
 # from system_management.api.serializers import DeleteUserSerializer, GetAlltUserModelSerializer, RegisterSerializer, UserModelSerializer, UserTypeModelSerializer, UserUpdateSerializer,CreateUserSerializer
-from system_management.api.serializers import GetAlltUserModelSerializer, CreateUserSerializer, UserModelSerializer, UserTypeModelSerializer
+from system_management.api.serializers import DeleteUserSerializer, GetAlltUserModelSerializer, CreateUserSerializer, UserModelSerializer, UserTypeModelSerializer, UserUpdateSerializer
 from system_management.models import Profile, User, UserType
 from rest_framework.permissions import AllowAny
 from rest_framework.authtoken.models import Token
@@ -363,3 +363,221 @@ def create_users_api(request):
             'message': constants.INVALID_REQUEST_METHOD
         }
         return Response(data, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+@api_view(['POST', 'PUT'])
+def update_user_api(request):
+    print('executing update_user_api')
+    if request.method == 'POST':
+        try:
+            # More robust way to parse request body
+            if isinstance(request.body, bytes) and request.body:
+                try:
+                    body = json.loads(request.body)
+                except json.JSONDecodeError:
+                    print("Failed to parse JSON from bytes body")
+                    body = request.data
+            else:
+                body = request.data
+            
+            
+            # If body is empty or None, use request.data
+            if not body:
+                body = request.data
+            
+            serializer = UserUpdateSerializer(data=body)
+
+            if serializer.is_valid():
+                validated_data = serializer.validated_data
+                user_id = validated_data.get('user_id')
+                email = validated_data.get('email')
+
+                # Check for duplicate email
+                if User.objects.exclude(id=user_id).filter(email=email).exists():
+                    return Response({
+                        'status': "error",
+                        'message': f"User with email {email} already exists."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
+                # Fetch the user
+                try:
+                    user = User.objects.get(id=user_id)
+                except User.DoesNotExist:
+                    return Response({
+                        'status': "error",
+                        'message': f"User with id {user_id} does not exist."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
+                user_type_id = validated_data.get('user_type_id')
+                try:
+                    user_type = UserType.objects.get(id=user_type_id)
+                except UserType.DoesNotExist:
+                    return Response({
+                        'status': "error",
+                        'message': f"User type with id {user_type_id} does not exist."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
+                email_change = False
+                if not user.email == validated_data.get('email'):
+                    email_change = True
+
+                # Update user data
+                user.first_name = validated_data.get('first_name')
+                user.last_name = validated_data.get('last_name')
+                user.email = validated_data.get('email')
+                user.user_type_id = user_type.id
+                user.save()
+
+                return Response({
+                    'status': "success",
+                    'message': "User updated successfully.",
+                    'user_type': str(user_type.name).lower(),
+                    "email_change": email_change
+                }, status=status.HTTP_200_OK)
+
+            else:
+                print('Serializer errors:', serializer.errors)
+                return Response({
+                    'status': "error",
+                    'message': str(serializer.errors)
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            print(f"Exception in update_user_api: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response({
+                'status': "error",
+                'message': f"An error occurred: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    else:
+        return Response({
+            'status': "error",
+            'message': "Invalid request method. Use POST."
+        }, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
+
+# @api_view(["POST"])
+# # @permission_classes((AllowAny,))
+# def delete_user_api(request):
+#     """
+#     Deletes a user and their profile by email.
+#     Accepts email in body (JSON or form-data) or query param.
+#     """
+#     try:
+#         if request.content_type == 'application/json':
+#             body = json.loads(request.body)
+#             print('body_________________________',body)
+#         else:
+#             body = request.data
+#             print('inside if ',body)
+#         print('passed statement')
+
+#         # email = body.get("email") or request.query_params.get("email")
+#         email  = body.get("email")
+#         print('email ***********************', email)
+#         if not email:
+#             print('no email')
+#             return Response({
+#                 "status": "error",
+#                 "message": "Email is required to delete a user."
+#             }, status=status.HTTP_400_BAD_REQUEST)
+#         print('going into srialzier')
+#         serializer = DeleteUserSerializer(data={"email": email})
+#         if not serializer.is_valid():
+#             return Response({
+#                 "status": "error",
+#                 "message": serializer.errors
+#             }, status=status.HTTP_400_BAD_REQUEST)
+
+#         print('serilazer passed  to delete user')
+#         user = User.objects.get(email=email)
+#         user.delete()
+
+#         return Response({
+#             "status": "success",
+#             "message": f"User with email {email} has been deleted."
+#         }, status=status.HTTP_200_OK)
+
+#     except Exception as e:
+#         return Response({
+#             "status": "error",
+#             "message": f"An unexpected error occurred: {str(e)}"
+#         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+@api_view(["POST"])
+# @permission_classes((AllowAny,))
+def delete_user_api(request):
+    """
+    Deletes a user and their profile by email.
+    Accepts email in body (JSON or form-data) or query param.
+    """
+    try:
+        # Handle request data - DRF automatically parses JSON
+        body = request.data
+        print('body_________________________', body)
+        print('body type:', type(body))
+        
+        # Handle case where body might be a string (needs parsing)
+        if isinstance(body, str):
+            try:
+                body = json.loads(body)
+                print('parsed body:', body)
+            except json.JSONDecodeError:
+                return Response({
+                    "status": "error",
+                    "message": "Invalid JSON format in request body."
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        print('passed statement')
+
+        # Get email from body or query params
+        email = body.get("email") if isinstance(body, dict) else None
+        if not email:
+            email = request.query_params.get("email")
+        print('email ***********************', email)
+        
+        if not email:
+            print('no email')
+            return Response({
+                "status": "error",
+                "message": "Email is required to delete a user."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        print('going into serializer')
+        
+        # Validate email format (assuming you have a DeleteUserSerializer)
+        serializer = DeleteUserSerializer(data={"email": email})
+        if not serializer.is_valid():
+            return Response({
+                "status": "error",
+                "message": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if user exists before trying to delete
+        try:
+            user = User.objects.get(email=email)
+            user.delete()
+            
+            return Response({
+                "status": "success",
+                "message": f"User with email {email} has been deleted."
+            }, status=status.HTTP_200_OK)
+            
+        except User.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": f"User with email {email} does not exist."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+    except json.JSONDecodeError:
+        return Response({
+            "status": "error",
+            "message": "Invalid JSON format in request body."
+        }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()  # This will help you see the full error in console
+        return Response({
+            "status": "error",
+            "message": f"An unexpected error occurred: {str(e)}"
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

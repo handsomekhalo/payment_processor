@@ -655,3 +655,218 @@ def create_user(request):
             "status": "error",
             "message": f"Server error occurred: {str(e)}"
         }, status=500)
+
+
+
+
+
+@csrf_exempt
+def update_user(request, user_id):
+    
+    if request.method != 'POST':
+        return JsonResponse({
+            "status": "error",
+            "message": "Method not allowed. Use POST."
+        }, status=405)
+
+    try:
+        # Extract token from Authorization header
+        auth_header = request.headers.get("Authorization", "")
+        token = None
+        if auth_header.startswith("Token "):
+            token = auth_header.split("Token ")[-1]
+        elif auth_header.startswith("Bearer "):
+            token = auth_header.split("Bearer ")[-1]
+
+        if not token:
+            return JsonResponse({
+                "status": "error",
+                "message": "Authorization token is required."
+            }, status=401)
+
+        # Store token in session
+        request.session["token"] = token
+        request.session.modified = True
+
+        # Parse JSON body
+        data = json.loads(request.body)
+
+        # Process role and user_type_id
+        role = data.get('role')
+        user_type_id = None
+
+        if role not in [None, '', 'null', 'None']:
+            user_type_id = int(role)
+        else:
+            user_type_id = data.get('user_type_id')
+            # Convert to int if possible
+            if user_type_id not in [None, '', 'null', 'None']:
+                try:
+                    user_type_id = int(user_type_id)
+                except (ValueError, TypeError):
+                    return JsonResponse({
+                        "status": "error",
+                        "message": f"Invalid user type ID format: {user_type_id}"
+                    }, status=400)
+        
+        
+        first_name = data.get('first_name')
+        last_name = data.get('last_name')
+        email = data.get('email')
+
+        if not all([first_name, last_name, email]):
+            return JsonResponse({
+                "status": "error",
+                "message": "First name, last name, and email are required."
+            }, status=400)
+
+        if user_type_id is None:
+            return JsonResponse({
+                "status": "error",
+                "message": "User type ID is required."
+            }, status=400)
+            
+        # Check if user exists
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return JsonResponse({
+                "status": "error",
+                "message": "User not found."
+            }, status=404)
+
+        # Prepare payload for API call
+        payload = {
+            "user_id": user_id,
+            "user_type_id": user_type_id,
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": email,
+        }
+
+
+        # Make API call
+        url = f"{host_url(request)}{reverse_lazy('update_user_api')}"
+        headers = {
+            'Authorization': f'Token {token}',
+            'Content-Type': 'application/json'  # Make sure content type is correct
+        }
+
+        # Use requests directly instead of api_connection to debug
+        response = requests.post(url, json=payload, headers=headers)
+        
+        try:
+            response_data = response.json()
+        except ValueError:
+            return JsonResponse({
+                "status": "error",
+                "message": "Invalid response from API"
+            }, status=500)
+
+        if response_data.get('status') == 'success':
+            return JsonResponse({
+                "status": "success",
+                "message": "User updated successfully"
+            })
+        else:
+            return JsonResponse({
+                "status": "error",
+                "message": response_data.get('message', 'Update failed')
+            }, status=400)
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            "status": "error",
+            "message": "Invalid JSON data"
+        }, status=400)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            "status": "error",
+            "message": f"Server error occurred: {str(e)}"
+        }, status=500)
+    
+
+
+
+@csrf_exempt
+def delete_user(request):
+    """
+    Delete user view – gets email from frontend and calls delete_user_api
+    """
+    if request.method != 'POST':
+        return JsonResponse({
+            "status": "error",
+            "message": "Method not allowed. Use Post."
+        }, status=405)
+
+    try:
+        # Extract token from session or Authorization header
+        token = request.session.get("token")
+        if not token:
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Token "):
+                token = auth_header.split("Token ")[-1]
+            elif auth_header.startswith("Bearer "):
+                token = auth_header.split("Bearer ")[-1]
+
+        if not token:
+            return JsonResponse({
+                "status": "error",
+                "message": "Authorization token is required."
+            }, status=401)
+
+        # Parse request data
+        if request.content_type == 'application/json':
+            data = json.loads(request.body)
+
+            print('email data', data)
+        else:
+            data = request.POST
+
+        email = data.get('email')
+        print('email data', email)
+
+
+        if not email:
+            return JsonResponse({
+                "status": "error",
+                "message": "Email is required to delete a user."
+            }, status=400)
+
+        # Call the API
+        url = f"{host_url(request)}{reverse('delete_user_api')}"  # Ensure this name is in urls.py
+        headers = {
+            'Authorization': f'Token {token}',
+            'Content-Type': 'application/json'
+        }
+        payload = json.dumps({
+            "email": email
+        })
+
+        response_data = api_connection(method="POST", url=url, headers=headers, data=payload)
+
+        if response_data.get("status") == "success":
+            return JsonResponse({
+                "status": "success",
+                "message": response_data.get("message", "User deleted successfully")
+            }, status=200)
+        else:
+            return JsonResponse({
+                "status": "error",
+                "message": response_data.get("message", "Failed to delete user")
+            }, status=400)
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            "status": "error",
+            "message": "Invalid JSON data"
+        }, status=400)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            "status": "error",
+            "message": f"Server error occurred: {str(e)}"
+        }, status=500)

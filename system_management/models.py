@@ -28,20 +28,16 @@ class UserManager(BaseUserManager):
         return user
 
     def create_superuser(self, email, password, **extra_fields):
-        # Ensure the superuser flags are set
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('is_active', True)
 
-        # Handle the case where the user type doesn't exist.
         try:
-            # Get the UserType ID for 'ADMIN'
             admin_user_type = UserType.objects.get(name=constants.ADMIN)
             extra_fields.setdefault('user_type', admin_user_type)
         except ObjectDoesNotExist:
             raise ValueError(_(f'{constants.ADMIN} role not found'))
         
-        # Call the base create_user method, passing all extra fields
         return self.create_user(email, password, **extra_fields)
 
 class User(AbstractUser):
@@ -66,6 +62,15 @@ class User(AbstractUser):
     def __str__(self):
         return f"{self.email} ({self.user_type})"
 
+class Province(models.Model):
+    """
+    South African provinces (helps with structured address data).
+    """
+    name = models.CharField(max_length=255, unique=True)
+
+    def __str__(self):
+        return self.name
+
 class Profile(models.Model):
     """
     Profile stores identity, contact, and compliance details for KYC/AML.
@@ -80,7 +85,7 @@ class Profile(models.Model):
     street_address = models.CharField(max_length=255)
     suburb = models.CharField(max_length=255)
     city = models.CharField(max_length=255)
-    province = models.CharField(max_length=255)
+    province = models.ForeignKey(Province, on_delete=models.SET_NULL, null=True)
     postal_code = models.CharField(max_length=10, default="")
     
     # Merchant-specific details
@@ -88,8 +93,13 @@ class Profile(models.Model):
     business_registration_number = models.CharField(max_length=100, null=True, blank=True)
     vat_number = models.CharField(max_length=100, null=True, blank=True)
     
+    # Compliance documents (store metadata or S3 URLs, not raw files)
+    kyc_document = models.CharField(max_length=255, null=True, blank=True)  # e.g., S3 URL for ID scan
+    fica_document = models.CharField(max_length=255, null=True, blank=True)  # e.g., S3 URL for proof of address
+    
     # KYC/AML compliance
     kyc_verified = models.BooleanField(default=False)
+    kyc_verified_at = models.DateTimeField(null=True, blank=True)
     aml_flagged = models.BooleanField(default=False)
     
     date_created = models.DateTimeField(auto_now_add=True)
@@ -98,7 +108,6 @@ class Profile(models.Model):
 
     def __str__(self):
         return f"{self.user.email} Profile"
-
 class Province(models.Model):
     """
     South African provinces (helps with structured address data).

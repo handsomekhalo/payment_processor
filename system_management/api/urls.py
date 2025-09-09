@@ -18,5 +18,4 @@ urlpatterns = [
     # path('send_email_api/', send_email_api, name='send_email_api'),
     path('delete_user_api/', views.delete_user_api, name='delete_user_api'),
 
-
 ]

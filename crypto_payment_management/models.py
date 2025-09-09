@@ -3,7 +3,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.utils.translation import gettext_lazy as _
 from django.core.validators import RegexValidator
 
-from system_management.models import User
+from system_management.models import User, Province
 # Create your models here.
 
 class Stablecoin(models.Model):
@@ -25,15 +25,7 @@ class MerchantWallet(models.Model):
     """
     merchant = models.ForeignKey(User, on_delete=models.CASCADE, related_name="wallets")
     stablecoin = models.ForeignKey(Stablecoin, on_delete=models.CASCADE)
-    address = models.CharField(
-        max_length=100,
-        validators=[
-            RegexValidator(
-                regex=r'^[0-9a-zA-Z]{26,44}$',  # Covers Ethereum (0x...), Tron (T...), Solana
-                message="Invalid wallet address format"
-            )
-        ]
-    )
+    address = models.CharField(max_length=100)  # Allow flexibility
     is_active = models.BooleanField(default=True)  # For toggling address usage
     date_added = models.DateTimeField(auto_now_add=True)
 
@@ -70,7 +62,7 @@ class Transaction(models.Model):
     customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, blank=True)
     stablecoin = models.ForeignKey(Stablecoin, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=18, decimal_places=6)  # Supports stablecoin precision
-    transaction_hash = models.CharField(max_length=100, unique=True, blank=True, null=True)  # Blockchain tx hash
+    transaction_hash = models.CharField(max_length=128, unique=True, blank=True, null=True)  # Blockchain tx hash
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -86,7 +78,7 @@ class PaymentRequest(models.Model):
     merchant = models.ForeignKey(User, on_delete=models.CASCADE, related_name="payment_requests")
     stablecoin = models.ForeignKey(Stablecoin, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=18, decimal_places=6)
-    wallet_address = models.ForeignKey(MerchantWallet, on_delete=models.CASCADE)
+    wallet = models.ForeignKey(MerchantWallet, on_delete=models.CASCADE)
     request_id = models.CharField(max_length=50, unique=True)  # Unique ID for QR code/invoice
     status = models.CharField(max_length=20, choices=(
         ('OPEN', 'Open'),
@@ -119,3 +111,23 @@ class Report(models.Model):
 
     def __str__(self):
         return f"{self.merchant.email} - {self.report_type} Report ({self.start_date})"
+
+
+class MerchantProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="merchant_profile")
+    business_name = models.CharField(max_length=255)
+    registration_number = models.CharField(max_length=100, blank=True, null=True)
+    vat_number = models.CharField(max_length=100, blank=True, null=True)
+    compliance_status = models.CharField(
+        max_length=20,
+        choices=(("PENDING", "Pending"), ("VERIFIED", "Verified"), ("REJECTED", "Rejected")),
+        default="PENDING"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class TransactionLog(models.Model):
+    transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE, related_name="logs")
+    status = models.CharField(max_length=20)  # e.g., Detected, Confirmed, Failed
+    message = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)

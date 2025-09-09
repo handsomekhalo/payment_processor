@@ -14,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 
+
 from rest_framework.decorators import api_view, permission_classes
 
 from rest_framework import (
@@ -456,54 +457,6 @@ def update_user_api(request):
         }, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
-
-# @api_view(["POST"])
-# # @permission_classes((AllowAny,))
-# def delete_user_api(request):
-#     """
-#     Deletes a user and their profile by email.
-#     Accepts email in body (JSON or form-data) or query param.
-#     """
-#     try:
-#         if request.content_type == 'application/json':
-#             body = json.loads(request.body)
-#             print('body_________________________',body)
-#         else:
-#             body = request.data
-#             print('inside if ',body)
-#         print('passed statement')
-
-#         # email = body.get("email") or request.query_params.get("email")
-#         email  = body.get("email")
-#         print('email ***********************', email)
-#         if not email:
-#             print('no email')
-#             return Response({
-#                 "status": "error",
-#                 "message": "Email is required to delete a user."
-#             }, status=status.HTTP_400_BAD_REQUEST)
-#         print('going into srialzier')
-#         serializer = DeleteUserSerializer(data={"email": email})
-#         if not serializer.is_valid():
-#             return Response({
-#                 "status": "error",
-#                 "message": serializer.errors
-#             }, status=status.HTTP_400_BAD_REQUEST)
-
-#         print('serilazer passed  to delete user')
-#         user = User.objects.get(email=email)
-#         user.delete()
-
-#         return Response({
-#             "status": "success",
-#             "message": f"User with email {email} has been deleted."
-#         }, status=status.HTTP_200_OK)
-
-#     except Exception as e:
-#         return Response({
-#             "status": "error",
-#             "message": f"An unexpected error occurred: {str(e)}"
-#         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(["POST"])
 # @permission_classes((AllowAny,))
 def delete_user_api(request):

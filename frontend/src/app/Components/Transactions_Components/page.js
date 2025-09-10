@@ -1,17 +1,18 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import Sidebar from '../dashboard/SideBar/sidebar';
-import UserTable from './usermanagement';
-import { useAuth } from '../../../../../AuthContext';
-import Navbar from '../dashboard/SideBar/navheader';
-import backendApi from '../../../../../utils/backendApi';
-import EditUserModal from './edit_user_modalr';
-import CreateUserModal from './Create_User_Modal';
-import DeleteUserModal from './delete_user_modal';
+import Sidebar from '../System_Management_Component/dashboard/SideBar/sidebar';
+
+import UserTable from '../System_Management_Component/Usermanagement/usermanagement';
+import { useAuth } from '../../../../AuthContext';
+// import Navbar from '../dashboard/SideBar/navheader';
+import backendApi from '../../../../utils/backendApi';
+import EditUserModal from '../System_Management_Component/Usermanagement/edit_user_modalr';
+import CreateUserModal from '../System_Management_Component/Usermanagement/Create_User_Modal';
+import DeleteUserModal from '../System_Management_Component/Usermanagement/delete_user_modal';
 
 
-const UserManagement = () => {
+const Transactions = () => {
 //   const { authToken, isAuthenticated, navigate } = useAuth();
 //   const { authToken, isAuthenticated, navigate, isLoading } = useAuth();
 
@@ -342,4 +343,4 @@ const handleDelete = (user) => {
   );
 };
 
-export default UserManagement;
+export default Transactions;

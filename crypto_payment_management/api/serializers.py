@@ -1,6 +1,6 @@
 
 
-from crypto_payment_management.models import MerchantProfile
+from crypto_payment_management.models import MerchantProfile, MerchantWallet
 # from system_management.api import serializers
 from crypto_payment_management.api import serializers
 from rest_framework import serializers
@@ -44,3 +44,49 @@ class GetMerchantProfileSerializer(serializers.ModelSerializer):
             "vat_number",
         ]
 
+
+
+class MerchantProfileUpdateSerializer(serializers.Serializer):
+    merchant_id = serializers.IntegerField(required=True)
+    business_name = serializers.CharField(max_length=255, required=False)
+    business_registration_number = serializers.CharField(max_length=100, required=False)
+    vat_number = serializers.CharField(max_length=100, required=False)
+    # phone_number = serializers.CharField(max_length=20, required=False)
+    street_address = serializers.CharField(max_length=255, required=False)
+    # suburb = serializers.CharField(max_length=255, required=False)
+    # city = serializers.CharField(max_length=255, required=False)
+    province = serializers.IntegerField(required=False)
+        # postal_code = serializers.CharField(max_length=10, required=False)
+
+
+class MerchantWalletSerializer(serializers.ModelSerializer):
+    stablecoin_name = serializers.CharField(source="stablecoin.name", read_only=True)
+    stablecoin_symbol = serializers.CharField(source="stablecoin.symbol", read_only=True)
+    blockchain = serializers.CharField(source="stablecoin.blockchain", read_only=True)
+
+    class Meta:
+        model = MerchantWallet
+        fields = ["id", "merchant", "stablecoin", "stablecoin_name", "stablecoin_symbol", "blockchain", "address", "is_active", "date_added"]
+        read_only_fields = ["id", "date_added", "merchant"]
+
+
+class CreateMerchantWalletSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MerchantWallet
+        fields = ["stablecoin", "address"]
+
+    def create(self, validated_data):
+        merchant = self.context["request"].user
+        return MerchantWallet.objects.create(merchant=merchant, **validated_data)
+
+
+class UpdateMerchantWalletSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MerchantWallet
+        fields = ["address", "is_active"]
+
+# class MerchantStatusSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = MerchantProfile
+#         fields = ["id", "account_status"]
+#         read_only_fields = ["id"]

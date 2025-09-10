@@ -11,8 +11,8 @@ urlpatterns = [
     path('create_merchant_profile_api/', views.create_merchant_profile_api, name='create_merchant_profile_api'),
     path('get_merchant_profile_api/<int:merchant_id>/', views.get_merchant_profile_api, name='get_merchant_profile_api'),
 
-    # path('get_users_api/', views.get_users_api, name="get_users_api"),
-    # path('get_user_types_api/', views.get_user_types_api, name="get_user_types_api"),
+    path('update_merchant_profile_api/', views.update_merchant_profile_api, name="update_merchant_profile_api"),
+    path('delete_merchant_profile_api/', views.delete_merchant_profile_api, name="delete_merchant_profile_api"),
     # path('update_user_api/', views.update_user_api, name="update_user_api"),
     # path('create_users_api/', views.create_users_api, name="create_users_api"),
 

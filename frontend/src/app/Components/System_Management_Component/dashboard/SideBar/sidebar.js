@@ -31,7 +31,7 @@ const Sidebar = () => {
     {
       title: 'Manage Transactions',
       links: [
-        {  href: '/Components/Transactions_Components/Transactions', 
+        {  href: '/Components/Transactions_Components/', 
             icon: 'bx bx-user', label: 'Transact' } // Link to /users page
       
   

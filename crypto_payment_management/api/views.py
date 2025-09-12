@@ -1,13 +1,13 @@
 
 
 from requests import Response
-from crypto_payment_management.api.serializers import CreateMerchantProfileSerializer, CreateMerchantWalletSerializer, GetMerchantProfileSerializer, MerchantProfileUpdateSerializer, MerchantWalletSerializer, UpdateMerchantWalletSerializer
+from crypto_payment_management.api.serializers import CreateMerchantProfileSerializer, CreateMerchantWalletSerializer, CreatePaymentRequestSerializer, GetMerchantProfileSerializer, MerchantProfileUpdateSerializer, MerchantWalletSerializer, PaymentRequestSerializer, UpdateMerchantWalletSerializer, UpdatePaymentRequestSerializer
 import datetime
 from datetime import datetime
 import json
 import random
 from requests import Response
-from crypto_payment_management.models import MerchantProfile, MerchantWallet
+from crypto_payment_management.models import MerchantProfile, MerchantWallet, PaymentRequest
 from system_management import constants
 # from system_management.api.serializers import DeleteUserSerializer, GetAlltUserModelSerializer, RegisterSerializer, UserModelSerializer, UserTypeModelSerializer, UserUpdateSerializer,CreateUserSerializer
 from system_management.api.serializers import DeleteUserSerializer, GetAlltUserModelSerializer, CreateUserSerializer, UserModelSerializer, UserTypeModelSerializer, UserUpdateSerializer
@@ -226,7 +226,7 @@ def list_wallets_api(request, merchant_id):
     return Response({"status": "success", "wallets": serializer.data}, status=status.HTTP_200_OK)
 
 
-@api_view(["PUT", "PATCH"])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def update_wallet_api(request, wallet_id):
     """
@@ -254,7 +254,7 @@ def update_wallet_api(request, wallet_id):
     return Response({"status": "error", "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(["DELETE"])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def delete_wallet_api(request, wallet_id):
     """
@@ -291,3 +291,99 @@ def delete_wallet_api(request, wallet_id):
 #         serializer.save()
 #         return Response(serializer.data, status=status.HTTP_200_OK)
 #     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_payment_request_api(request):
+    """
+    Merchant/uperadmin creates a payment request (invoice / QR code)
+    """
+    # enforce merchant ownership
+    # if request.user.user_type != "MERCHANT": or request.user.user_type != "ADMIN":
+    #     return Response({"status": "error", "message": "Only merchants can create payment requests"},
+    #                     status=status.HTTP_403_FORBIDDEN)
+    # enforce merchant or admin ownership
+    # if request.user.user_type != "MERCHANT" and request.user.user_type != "ADMIN":
+    if request.user.user_type.name != "MERCHANT" and request.user.user_type.name != "ADMIN":
+
+        return Response({"status": "error", "message": "Only merchants and admins can create payment requests"},
+                        status=status.HTTP_403_FORBIDDEN)
+
+    # serializer = CreatePaymentRequestSerializer(data=request.data)
+    serializer = CreatePaymentRequestSerializer(data=request.data, context={"request": request})
+
+    
+    if serializer.is_valid():
+        print('serializer valid')
+        payment_request = serializer.save()
+        return Response({"status": "success", "payment_request": PaymentRequestSerializer(payment_request).data},
+                        status=status.HTTP_201_CREATED)
+    return Response({"status": "error", "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_payment_request_api(request, pk):
+    """
+    Retrieve one payment request
+    """
+    try:
+        pr = PaymentRequest.objects.get(id=pk)
+        if pr.merchant != request.user:
+            return Response({"status": "error", "message": "Not authorized"}, status=status.HTTP_403_FORBIDDEN)
+        serializer = PaymentRequestSerializer(pr)
+        return Response({"status": "success", "payment_request": serializer.data}, status=status.HTTP_200_OK)
+    except PaymentRequest.DoesNotExist:
+        return Response({"status": "error", "message": "Payment request not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def list_payment_requests_api(request,merchant_id ):
+    
+    """
+    List all requests for a merchant
+    """
+    if str(request.user.id) != str(merchant_id):
+        return Response({"status": "error", "message": "Not authorized"}, status=status.HTTP_403_FORBIDDEN)
+    prs = PaymentRequest.objects.filter(merchant_id=merchant_id)
+    serializer = PaymentRequestSerializer(prs, many=True)
+    return Response({"status": "success", "payment_requests": serializer.data}, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def update_payment_request_api(request, pk):
+    """
+    Update payment request status (e.g., mark expired)
+    """
+    try:
+        pr = PaymentRequest.objects.get(id=pk)
+        if pr.merchant != request.user:
+            return Response({"status": "error", "message": "Not authorized"}, status=status.HTTP_403_FORBIDDEN)
+        serializer = UpdatePaymentRequestSerializer(pr, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"status": "success", "payment_request": PaymentRequestSerializer(pr).data},
+                            status=status.HTTP_200_OK)
+        return Response({"status": "error", "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+    except PaymentRequest.DoesNotExist:
+        return Response({"status": "error", "message": "Payment request not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def delete_payment_request_api(request, pk):
+    """
+    Cancel payment request
+    """
+    try:
+        pr = PaymentRequest.objects.get(id=pk)
+        if pr.merchant != request.user:
+            return Response({"status": "error", "message": "Not authorized"}, status=status.HTTP_403_FORBIDDEN)
+        pr.status = "CANCELLED"
+        pr.save()
+        return Response({"status": "success", "message": "Payment request cancelled"}, status=status.HTTP_200_OK)
+    except PaymentRequest.DoesNotExist:
+        return Response({"status": "error", "message": "Payment request not found"}, status=status.HTTP_404_NOT_FOUND)

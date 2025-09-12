@@ -1,6 +1,8 @@
 
 
-from crypto_payment_management.models import MerchantProfile, MerchantWallet
+from datetime import datetime, timedelta
+import uuid
+from crypto_payment_management.models import MerchantProfile, MerchantWallet, PaymentRequest
 # from system_management.api import serializers
 from crypto_payment_management.api import serializers
 from rest_framework import serializers
@@ -85,8 +87,75 @@ class UpdateMerchantWalletSerializer(serializers.ModelSerializer):
         model = MerchantWallet
         fields = ["address", "is_active"]
 
+
+
+
+
+class CreatePaymentRequestSerializer(serializers.ModelSerializer):
+    wallet_id = serializers.IntegerField(write_only=True)
+
+    class Meta:
+        model = PaymentRequest
+        fields = ['merchant', 'stablecoin', 'amount', 'wallet_id', 'expires_at']
+
+    def validate_wallet_id(self, value):
+        try:
+            wallet = MerchantWallet.objects.get(id=value, is_active=True)
+        except MerchantWallet.DoesNotExist:
+            raise serializers.ValidationError("Invalid wallet_id")
+        return value
+    
+    
+    
+    def create(self, validated_data):
+        request = self.context['request']  # grab request from serializer context
+        validated_data['merchant'] = request.user  # auto-assign logged-in merchant
+        wallet_id = validated_data.pop('wallet_id')
+        wallet = MerchantWallet.objects.get(id=wallet_id)
+        validated_data['wallet'] = wallet
+        validated_data['request_id'] = str(uuid.uuid4())
+        if not validated_data.get('expires_at'):
+            validated_data['expires_at'] = datetime.now() + timedelta(hours=1)
+        return PaymentRequest.objects.create(**validated_data)
+
+
+    # def create(self, validated_data):
+    #     wallet_id = validated_data.pop('wallet_id')
+    #     wallet = MerchantWallet.objects.get(id=wallet_id)
+    #     validated_data['wallet'] = wallet
+    #     validated_data['request_id'] = str(uuid.uuid4())
+    #     # Optional: auto-set expiry if not provided
+    #     if not validated_data.get('expires_at'):
+    #         validated_data['expires_at'] = datetime.now() + timedelta(hours=1)
+    #     return PaymentRequest.objects.create(**validated_data)
+
+
+class PaymentRequestSerializer(serializers.ModelSerializer):
+    wallet_address = serializers.CharField(source='wallet.address', read_only=True)
+    payment_uri = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PaymentRequest
+        fields = ['id', 'request_id', 'merchant', 'stablecoin', 'amount',
+                  'wallet', 'wallet_address', 'payment_uri', 'status', 'created_at', 'expires_at']
+
+    def get_payment_uri(self, obj):
+        return f"{obj.stablecoin.blockchain.lower()}:{obj.wallet.address}?amount={obj.amount}&token={obj.stablecoin.symbol}"
+
+
+class UpdatePaymentRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaymentRequest
+        # fields = ['status']
+
+        fields = ['status','stablecoin','amount','wallet']
+
+
 # class MerchantStatusSerializer(serializers.ModelSerializer):
 #     class Meta:
 #         model = MerchantProfile
 #         fields = ["id", "account_status"]
 #         read_only_fields = ["id"]
+
+
+

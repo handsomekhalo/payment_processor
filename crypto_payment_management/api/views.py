@@ -1,13 +1,13 @@
 
 
 from requests import Response
-from crypto_payment_management.api.serializers import CreateMerchantProfileSerializer, CreateMerchantWalletSerializer, CreatePaymentRequestSerializer, GetMerchantProfileSerializer, MerchantProfileUpdateSerializer, MerchantWalletSerializer, PaymentRequestSerializer, UpdateMerchantWalletSerializer, UpdatePaymentRequestSerializer
+from crypto_payment_management.api.serializers import CreateMerchantProfileSerializer, CreateMerchantWalletSerializer, CreatePaymentRequestSerializer, CreateTransactionSerializer, GetMerchantProfileSerializer, MerchantProfileUpdateSerializer, MerchantWalletSerializer, PaymentRequestSerializer, TransactionSerializer, UpdateMerchantWalletSerializer, UpdatePaymentRequestSerializer, UpdateTransactionSerializer
 import datetime
 from datetime import datetime
 import json
 import random
 from requests import Response
-from crypto_payment_management.models import MerchantProfile, MerchantWallet, PaymentRequest
+from crypto_payment_management.models import MerchantProfile, MerchantWallet, PaymentRequest, Transaction
 from system_management import constants
 # from system_management.api.serializers import DeleteUserSerializer, GetAlltUserModelSerializer, RegisterSerializer, UserModelSerializer, UserTypeModelSerializer, UserUpdateSerializer,CreateUserSerializer
 from system_management.api.serializers import DeleteUserSerializer, GetAlltUserModelSerializer, CreateUserSerializer, UserModelSerializer, UserTypeModelSerializer, UserUpdateSerializer
@@ -372,7 +372,7 @@ def update_payment_request_api(request, pk):
         return Response({"status": "error", "message": "Payment request not found"}, status=status.HTTP_404_NOT_FOUND)
 
 
-@api_view(["POST"])
+@api_view(["OST","DELETE"])
 @permission_classes([IsAuthenticated])
 def delete_payment_request_api(request, pk):
     """
@@ -387,3 +387,237 @@ def delete_payment_request_api(request, pk):
         return Response({"status": "success", "message": "Payment request cancelled"}, status=status.HTTP_200_OK)
     except PaymentRequest.DoesNotExist:
         return Response({"status": "error", "message": "Payment request not found"}, status=status.HTTP_404_NOT_FOUND)
+    
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_transaction_api(request):
+    """
+    Create a transaction manually (useful for testing or manual reconciliation).
+    """
+    serializer = CreateTransactionSerializer(data=request.data)
+    if serializer.is_valid():
+        tx = serializer.save()
+        return Response({"status": "success", "transaction": TransactionSerializer(tx).data},
+                        status=status.HTTP_201_CREATED)
+    return Response({"status": "error", "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_single_transaction_by_api(request, transaction_id):
+    """
+    Retrieve a single transaction by ID.
+    """
+    try:
+        tx = Transaction.objects.get(id=transaction_id, merchant=request.user)
+    except Transaction.DoesNotExist:
+        return Response({"status": "error", "message": "Transaction not found."},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    serializer = TransactionSerializer(tx)
+    return Response({"status": "success", "transaction": serializer.data}, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def list_transactions_api(request):
+    """
+    List all transactions for a merchant (can filter by status or date).
+    """
+    status_filter = request.query_params.get("status")
+    qs = Transaction.objects.filter(merchant=request.user)
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+
+    serializer = TransactionSerializer(qs, many=True)
+    return Response({"status": "success", "transactions": serializer.data}, status=status.HTTP_200_OK)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def update_transaction_api(request, transaction_id):
+    """
+    Update transaction status (e.g., mark as confirmed or refunded).
+    """
+    try:
+        tx = Transaction.objects.get(id=transaction_id, merchant=request.user)
+    except Transaction.DoesNotExist:
+        return Response({"status": "error", "message": "Transaction not found."},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    serializer = UpdateTransactionSerializer(tx, data=request.data, partial=True)
+    if serializer.is_valid():
+        tx = serializer.save()
+        return Response({"status": "success", "transaction": TransactionSerializer(tx).data},
+                        status=status.HTTP_200_OK)
+    return Response({"status": "error", "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_transaction_api(request, transaction_id):
+    """
+    Delete/cancel a transaction manually.
+    """
+    try:
+        tx = Transaction.objects.get(id=transaction_id, merchant=request.user)
+    except Transaction.DoesNotExist:
+        return Response({"status": "error", "message": "Transaction not found."},
+                        status=status.HTTP_404_NOT_FOUND)
+
+    tx.delete()
+    return Response({"status": "success", "message": "Transaction deleted."}, status=status.HTTP_204_NO_CONTENT)
+
+
+# @api_view(["POST"])
+# @permission_classes([AllowAny])  # ✅ Allow webhook to hit this endpoint without login
+# def blockchain_webhook_api(request):
+#     try:
+#         data = json.loads(request.body)
+#         # Log the payload for debugging
+#         print("Webhook received:", data)
+
+#         # Optionally: verify the signature if Moralis provides one
+#         # (prevents random requests from spamming your endpoint)
+
+#         # TODO: process transaction, call create_transaction_api internally
+
+#         return Response({"status": "ok"}, status=status.HTTP_200_OK)
+#     except Exception as e:
+#         print("Webhook error:", str(e))
+#         return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def blockchain_webhook_api(request):
+    """
+    Webhook endpoint for Moralis Streams.
+    Receives blockchain events, extracts transactions, links to payment requests, and stores them.
+    """
+    try:
+        payload = json.loads(request.body)
+        print("Webhook received:", payload)
+
+        txs = payload.get("txs", [])
+        if not txs:
+            print("No transactions found in payload, ignoring.")
+            return Response({"status": "ignored"}, status=status.HTTP_200_OK)
+
+        saved_transactions = []
+        errors = []
+
+        for tx in txs:
+            tx_hash = tx.get("hash")
+            to_address = tx.get("toAddress")
+            from_address = tx.get("fromAddress")
+            amount_wei = tx.get("value")
+            confirmed = tx.get("confirmed", False)
+            chain_id = payload.get("chainId")
+
+            # ✅ Convert from WEI to ETH/USDT/etc.
+            try:
+                amount = int(amount_wei) / (10 ** 18)
+            except Exception:
+                amount = 0
+
+            # ✅ Find the wallet in your DB
+            try:
+                wallet = MerchantWallet.objects.get(address__iexact=to_address, is_active=True)
+            except MerchantWallet.DoesNotExist:
+                print(f"No wallet found for address {to_address}, ignoring tx {tx_hash}")
+                continue
+
+            # ✅ Attempt to find a matching payment request
+            payment_request = PaymentRequest.objects.filter(
+                wallet=wallet,
+                amount=amount,
+                status="PENDING"
+            ).first()
+
+            if payment_request:
+                payment_request.status = "PAID"
+                payment_request.save()
+                print(f"💰 PaymentRequest {payment_request.id} marked as PAID for tx {tx_hash}")
+
+            # ✅ Build transaction data
+            transaction_data = {
+                "merchant": wallet.merchant.id,
+                "stablecoin": wallet.stablecoin.id,
+                "amount": amount,
+                "transaction_hash": tx_hash,
+                "status": "CONFIRMED" if confirmed else "PENDING",
+                "payment_request": payment_request.id if payment_request else None,
+            }
+
+            serializer = TransactionSerializer(data=transaction_data)
+            if serializer.is_valid():
+                saved = serializer.save()
+                saved_transactions.append(saved.id)
+                print(f"✅ Transaction {tx_hash} saved for merchant {wallet.merchant.id}")
+            else:
+                print(f"❌ Serializer error for {tx_hash}: {serializer.errors}")
+                errors.append({"tx_hash": tx_hash, "errors": serializer.errors})
+
+        return Response(
+            {"status": "processed", "saved_transactions": saved_transactions, "errors": errors},
+            status=status.HTTP_201_CREATED if saved_transactions else status.HTTP_200_OK,
+        )
+
+    except Exception as e:
+        print("Webhook error:", str(e))
+        return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+    # @api_view(["POST"])
+    # @permission_classes([AllowAny])
+    # def blockchain_webhook_api(request):
+    #     """
+    #     Receive blockchain transaction events from Moralis and save them.
+    #     """
+    #     try:
+    #         payload = json.loads(request.body)
+    #         print("Webhook received:", payload)
+
+    #         # ✅ 1. Extract relevant fields from Moralis payload
+    #         tx_hash = payload.get("txHash") or payload.get("transaction_hash")
+    #         to_address = payload.get("to")
+    #         from_address = payload.get("from")
+    #         amount = payload.get("value")  # usually in smallest unit (wei for ETH)
+    #         token_symbol = payload.get("tokenSymbol", "USDT")
+    #         chain_id = payload.get("chainId")
+
+    #         # ✅ 2. Find the matching merchant wallet
+    #         # from system_management.models import MerchantWallet, Stablecoin
+    #         try:
+    #             wallet = MerchantWallet.objects.get(address__iexact=to_address, is_active=True)
+    #         except MerchantWallet.DoesNotExist:
+    #             print(f"No wallet found for address {to_address}, ignoring transaction")
+    #             return Response({"status": "ignored"}, status=status.HTTP_200_OK)
+
+    #         # ✅ 3. Convert amount to proper decimals if needed
+    #         # For MVP, assume Moralis sends human-readable amount
+    #         # In production, you'd divide by 10**token_decimals
+
+    #         transaction_data = {
+    #             "merchant": wallet.merchant.id,
+    #             "stablecoin": wallet.stablecoin.id,
+    #             "amount": amount,
+    #             "transaction_hash": tx_hash,
+    #             "status": "PENDING",  # you can set CONFIRMED if Moralis confirms
+    #             "payment_request": None,  # can link if you pass requestId in metadata
+    #         }
+
+    #         serializer = TransactionSerializer(data=transaction_data)
+    #         if serializer.is_valid():
+    #             serializer.save()
+    #             return Response({"status": "success", "transaction": serializer.data}, status=status.HTTP_201_CREATED)
+    #         else:
+    #             print("Serializer errors:", serializer.errors)
+    #             return Response({"status": "error", "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    #     except Exception as e:
+    #         print("Webhook error:", str(e))
+    #         return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)

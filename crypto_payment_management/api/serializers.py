@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 import uuid
-from crypto_payment_management.models import MerchantProfile, MerchantWallet, PaymentRequest
+from crypto_payment_management.models import MerchantProfile, MerchantWallet, PaymentRequest, Transaction, TransactionLog
 # from system_management.api import serializers
 from crypto_payment_management.api import serializers
 from rest_framework import serializers
@@ -158,4 +158,38 @@ class UpdatePaymentRequestSerializer(serializers.ModelSerializer):
 #         read_only_fields = ["id"]
 
 
+class TransactionLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TransactionLog
+        fields = ['id', 'status', 'message', 'created_at']
 
+
+class TransactionSerializer(serializers.ModelSerializer):
+    logs = TransactionLogSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Transaction
+        fields = [
+            'id', 'merchant', 'customer', 'stablecoin', 'amount',
+            'transaction_hash', 'status', 'created_at', 'updated_at',
+            'payment_request', 'logs'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+
+class CreateTransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Transaction
+        fields = ['merchant', 'customer', 'stablecoin', 'amount', 'transaction_hash', 'payment_request']
+
+    def create(self, validated_data):
+        # You can auto-create a log when transaction is created
+        tx = Transaction.objects.create(**validated_data)
+        TransactionLog.objects.create(transaction=tx, status="CREATED", message="Transaction record created.")
+        return tx
+
+
+class UpdateTransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Transaction
+        fields = ['status', 'transaction_hash']

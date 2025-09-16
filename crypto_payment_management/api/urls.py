@@ -25,13 +25,7 @@ urlpatterns = [
     path('update_payment_request_api/<int:pk>/', views.update_payment_request_api, name="update_payment_request_api"),
     path('delete_payment_request_api/<int:pk>/', views.delete_payment_request_api, name="delete_payment_request_api"),
     path("blockchain_webhook_api/",views.blockchain_webhook_api, name="blockchain_webhook"),
-
-    
-
-
-        
-
-
+    path('get_transaction_api/<int:request_id>/', views.get_transaction_api, name="get_transaction_api"),
 
 
     # path('create_users_api/', views.create_users_api, name="create_users_api"),

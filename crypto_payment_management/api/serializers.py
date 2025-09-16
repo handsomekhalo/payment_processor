@@ -193,3 +193,16 @@ class UpdateTransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
         fields = ['status', 'transaction_hash']
+
+
+class GetTransactionSerializer(serializers.ModelSerializer):
+    logs = TransactionLogSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Transaction
+        fields = [
+            'id', 'merchant', 'customer', 'stablecoin', 'amount',
+            'transaction_hash', 'status', 'created_at', 'updated_at',
+            'payment_request', 'logs'
+        ]
+        read_only_fields = ['created_at', 'updated_at']

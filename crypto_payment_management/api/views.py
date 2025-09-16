@@ -1,7 +1,7 @@
 
 
 from requests import Response
-from crypto_payment_management.api.serializers import CreateMerchantProfileSerializer, CreateMerchantWalletSerializer, CreatePaymentRequestSerializer, CreateTransactionSerializer, GetMerchantProfileSerializer, MerchantProfileUpdateSerializer, MerchantWalletSerializer, PaymentRequestSerializer, TransactionSerializer, UpdateMerchantWalletSerializer, UpdatePaymentRequestSerializer, UpdateTransactionSerializer
+from crypto_payment_management.api.serializers import CreateMerchantProfileSerializer, CreateMerchantWalletSerializer, CreatePaymentRequestSerializer, CreateTransactionSerializer, GetMerchantProfileSerializer, GetTransactionSerializer, MerchantProfileUpdateSerializer, MerchantWalletSerializer, PaymentRequestSerializer, TransactionSerializer, UpdateMerchantWalletSerializer, UpdatePaymentRequestSerializer, UpdateTransactionSerializer
 import datetime
 from datetime import datetime
 import json
@@ -18,7 +18,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-
+from django.utils.dateparse import parse_date
 
 
 from rest_framework.decorators import api_view, permission_classes
@@ -571,53 +571,78 @@ def blockchain_webhook_api(request):
         return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-    # @api_view(["POST"])
-    # @permission_classes([AllowAny])
-    # def blockchain_webhook_api(request):
-    #     """
-    #     Receive blockchain transaction events from Moralis and save them.
-    #     """
-    #     try:
-    #         payload = json.loads(request.body)
-    #         print("Webhook received:", payload)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_transaction_api(request, id):
+    """
+    Retrieve a single transaction by ID.
+    """
+    try:
+        tx = Transaction.objects.get(id=id)
+        # Optional: enforce merchant ownership
+        if request.user != tx.merchant and request.user.user_type != "ADMIN":
+            return Response({"status": "error", "message": "Not authorized"}, status=status.HTTP_403_FORBIDDEN)
 
-    #         # ✅ 1. Extract relevant fields from Moralis payload
-    #         tx_hash = payload.get("txHash") or payload.get("transaction_hash")
-    #         to_address = payload.get("to")
-    #         from_address = payload.get("from")
-    #         amount = payload.get("value")  # usually in smallest unit (wei for ETH)
-    #         token_symbol = payload.get("tokenSymbol", "USDT")
-    #         chain_id = payload.get("chainId")
+        serializer = GetTransactionSerializer(tx)
+        return Response({"status": "success", "transaction": serializer.data}, status=status.HTTP_200_OK)
+    except Transaction.DoesNotExist:
+        return Response({"status": "error", "message": "Transaction not found"}, status=status.HTTP_404_NOT_FOUND)\
+        
 
-    #         # ✅ 2. Find the matching merchant wallet
-    #         # from system_management.models import MerchantWallet, Stablecoin
-    #         try:
-    #             wallet = MerchantWallet.objects.get(address__iexact=to_address, is_active=True)
-    #         except MerchantWallet.DoesNotExist:
-    #             print(f"No wallet found for address {to_address}, ignoring transaction")
-    #             return Response({"status": "ignored"}, status=status.HTTP_200_OK)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def list_transactions_api(request):
+    """
+    List transactions for a merchant.
+    Supports filtering by merchant_id, status, start_date, and end_date.
+    Works even if merchant_id is sent in request body (JSON).
+    """
+    try:
+        # ✅ 1. Parse JSON body safely (for connectors that send data in body even on GET)
+        if isinstance(request.body, bytes) and request.body:
+            try:
+                body = json.loads(request.body)
+            except json.JSONDecodeError:
+                print("❌ Failed to parse JSON from request body")
+                body = {}
+        else:
+            body = {}
 
-    #         # ✅ 3. Convert amount to proper decimals if needed
-    #         # For MVP, assume Moralis sends human-readable amount
-    #         # In production, you'd divide by 10**token_decimals
+        # ✅ 2. Extract params (body takes priority, fallback to query params)
+        merchant_id = body.get("merchant_id") or request.query_params.get("merchant_id")
+        status_filter = body.get("status") or request.query_params.get("status")
+        start_date = body.get("start_date") or request.query_params.get("start_date")
+        end_date = body.get("end_date") or request.query_params.get("end_date")
 
-    #         transaction_data = {
-    #             "merchant": wallet.merchant.id,
-    #             "stablecoin": wallet.stablecoin.id,
-    #             "amount": amount,
-    #             "transaction_hash": tx_hash,
-    #             "status": "PENDING",  # you can set CONFIRMED if Moralis confirms
-    #             "payment_request": None,  # can link if you pass requestId in metadata
-    #         }
+        # ✅ 3. Validation
+        if not merchant_id:
+            return Response({"status": "error", "message": "merchant_id is required"},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-    #         serializer = TransactionSerializer(data=transaction_data)
-    #         if serializer.is_valid():
-    #             serializer.save()
-    #             return Response({"status": "success", "transaction": serializer.data}, status=status.HTTP_201_CREATED)
-    #         else:
-    #             print("Serializer errors:", serializer.errors)
-    #             return Response({"status": "error", "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        # ✅ 4. Enforce merchant ownership (or allow admin)
+        if str(request.user.id) != str(merchant_id) and request.user.user_type != "ADMIN":
+            return Response({"status": "error", "message": "Not authorized"},
+                            status=status.HTTP_403_FORBIDDEN)
 
-    #     except Exception as e:
-    #         print("Webhook error:", str(e))
-    #         return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        # ✅ 5. Build queryset
+        qs = Transaction.objects.filter(merchant_id=merchant_id)
+
+        if status_filter:
+            qs = qs.filter(status=status_filter.upper())
+        if start_date:
+            qs = qs.filter(created_at__date__gte=parse_date(start_date))
+        if end_date:
+            qs = qs.filter(created_at__date__lte=parse_date(end_date))
+
+        serializer = TransactionSerializer(qs, many=True)
+        return Response({"status": "success", "transactions": serializer.data},
+                        status=status.HTTP_200_OK)
+
+    except Exception as e:
+        print(f"❌ Error in list_transactions_api: {str(e)}")
+        return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+
+

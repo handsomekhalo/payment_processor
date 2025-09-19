@@ -1,4 +1,5 @@
 
+from crypto_payment_management.models import Customer
 from system_management import constants
 from system_management.models import Profile, User
 from system_management.general_func_classes import BaseFormSerializer
@@ -138,20 +139,76 @@ class UserModelSerializer(serializers.ModelSerializer):
         )
 
 
+# class CreateUserSerializer(serializers.Serializer):
+#     first_name = serializers.CharField(max_length=50)
+#     last_name = serializers.CharField(max_length=50)
+#     email = serializers.EmailField()
+#     password = serializers.CharField(write_only=True, min_length=8)
+#     confirm_password = serializers.CharField(write_only=True, min_length=8)
+#     user_type = serializers.CharField(required=False)  # e.g., CUSTOMER or MERCHANT
+
+#     # Optional profile fields
+#     phone_number = serializers.CharField(max_length=20, required=False)
+#     # street_address = serializers.CharField(max_length=255, required=False)
+#     # city = serializers.CharField(max_length=255, required=False)
+#     # province = serializers.CharField(max_length=255, required=False)
+#     # postal_code = serializers.CharField(max_length=10, required=False)
+
+#     def validate(self, data):
+#         if data["password"] != data["confirm_password"]:
+#             raise serializers.ValidationError("Passwords do not match")
+#         return data
+
+#     def create(self, validated_data):
+#         # Pop profile-related fields
+#         profile_fields = {
+#             "phone_number": validated_data.pop("phone_number", None),
+#             # "street_address": validated_data.pop("street_address", None),
+#             # "city": validated_data.pop("city", None),
+#             # "province": validated_data.pop("province", None),
+#             # "postal_code": validated_data.pop("postal_code", ""),
+#         }
+
+#         # Remove confirm_password (not needed for User)
+#         validated_data.pop("confirm_password")
+
+#         # Assign user type (default CUSTOMER if not passed)
+#         user_type_name = validated_data.pop("user_type", constants.CUSTOMER)
+#         try:
+#             user_type = UserType.objects.get(name=user_type_name.upper())
+#         except UserType.DoesNotExist:
+#             raise serializers.ValidationError({"user_type": "Invalid user type"})
+        
+#         # Create user
+#         user = User.objects.create_user(
+#             email=validated_data["email"],
+#             password=validated_data["password"],
+#             first_name=validated_data["first_name"],
+#             last_name=validated_data["last_name"],
+#             user_type=user_type,
+#         )
+
+#         # Create Profile
+#         Profile.objects.create(
+#             user=user,
+#             **profile_fields
+#         )
+
+#         return user
+
 class CreateUserSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=50)
     last_name = serializers.CharField(max_length=50)
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, min_length=8)
     confirm_password = serializers.CharField(write_only=True, min_length=8)
-    user_type = serializers.CharField(required=False)  # e.g., CUSTOMER or MERCHANT
+    user_type = serializers.CharField(required=False)  # default CUSTOMER
 
-    # Optional profile fields
+    # Shared profile fields
     phone_number = serializers.CharField(max_length=20, required=False)
-    # street_address = serializers.CharField(max_length=255, required=False)
-    # city = serializers.CharField(max_length=255, required=False)
-    # province = serializers.CharField(max_length=255, required=False)
-    # postal_code = serializers.CharField(max_length=10, required=False)
+
+    # Customer-specific fields
+    province_id = serializers.IntegerField(required=False)
 
     def validate(self, data):
         if data["password"] != data["confirm_password"]:
@@ -159,42 +216,38 @@ class CreateUserSerializer(serializers.Serializer):
         return data
 
     def create(self, validated_data):
-        # Pop profile-related fields
         profile_fields = {
             "phone_number": validated_data.pop("phone_number", None),
-            # "street_address": validated_data.pop("street_address", None),
-            # "city": validated_data.pop("city", None),
-            # "province": validated_data.pop("province", None),
-            # "postal_code": validated_data.pop("postal_code", ""),
         }
+        province_id = validated_data.pop("province_id", None)
 
-        # Remove confirm_password (not needed for User)
         validated_data.pop("confirm_password")
 
-        # Assign user type (default CUSTOMER if not passed)
+        # Get user type (defaults to CUSTOMER)
         user_type_name = validated_data.pop("user_type", constants.CUSTOMER)
         try:
             user_type = UserType.objects.get(name=user_type_name.upper())
         except UserType.DoesNotExist:
             raise serializers.ValidationError({"user_type": "Invalid user type"})
-        
+
         # Create user
         user = User.objects.create_user(
-            email=validated_data["email"],
-            password=validated_data["password"],
-            first_name=validated_data["first_name"],
-            last_name=validated_data["last_name"],
             user_type=user_type,
+            **validated_data
         )
 
-        # Create Profile
-        Profile.objects.create(
+        # Create profile
+        profile = Profile.objects.create(
             user=user,
+            province_id=province_id,
             **profile_fields
         )
 
-        return user
+        # If this is a customer, create a Customer record
+        if user_type.name.upper() == constants.CUSTOMER:
+            Customer.objects.create(user=user, phone_number=profile.phone_number)
 
+        return user
 
 
 class UserTypeModelSerializer(serializers.ModelSerializer):

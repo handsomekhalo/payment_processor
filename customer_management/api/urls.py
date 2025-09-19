@@ -1,14 +1,17 @@
 """Urls for the api views of system_management app"""
 from django.urls import path
-import system_management.api.views as views
-import crypto_payment_management.api.views as views
+import customer_management.api.views as views
 from system_management.api.api_helpers import send_email_api
 
 
 
 urlpatterns = [
 
-    path('create_merchant_profile_api/', views.create_merchant_profile_api, name='create_merchant_profile_api'),
+    path('get_provinces_api/', views.get_provinces_api, name='get_provinces_api'),
+    path('get_customer_profile_api/', views.get_customer_profile_api, name='get_customer_profile_api'),
+    path('update_customer_profile_api/', views.update_customer_profile_api, name="update_customer_profile_api"),
+
+
     # path('get_merchant_profile_api/<int:merchant_id>/', views.get_merchant_profile_api, name='get_merchant_profile_api'),
 
     # path('update_merchant_profile_api/', views.update_merchant_profile_api, name="update_merchant_profile_api"),

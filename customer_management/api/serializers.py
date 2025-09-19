@@ -1,73 +1,9 @@
 from pytz import timezone
 from crypto_payment_management.api import serializers
+from rest_framework import serializers
 from crypto_payment_management.models import Customer, PaymentRequest, Stablecoin, Transaction
 from system_management import constants
 from system_management.models import Profile, Province, User, UserType
-
-
-class CustomerRegistrationSerializer(serializers.Serializer):
-    """
-    Serializer for customer registration/onboarding
-    """
-    email = serializers.EmailField()
-    password = serializers.CharField(write_only=True, min_length=8)
-    first_name = serializers.CharField(max_length=150)
-    last_name = serializers.CharField(max_length=150)
-    phone_number = serializers.CharField(max_length=20)
-    
-    # Address fields for KYC
-    # street_address = serializers.CharField(max_length=255)
-    # suburb = serializers.CharField(max_length=255)
-    # city = serializers.CharField(max_length=255)
-    province_id = serializers.IntegerField()
-    # postal_code = serializers.CharField(max_length=10)
-    
-    # Optional KYC documents
-    # passport_number = serializers.CharField(max_length=255, required=False, allow_blank=True)
-    # kyc_document = serializers.CharField(max_length=255, required=False, allow_blank=True)
-    # fica_document = serializers.CharField(max_length=255, required=False, allow_blank=True)
-
-    def validate_email(self, value):
-        if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError("User with this email already exists.")
-        return value
-
-    def validate_province_id(self, value):
-        if not Province.objects.filter(id=value).exists():
-            raise serializers.ValidationError("Invalid province selected.")
-        return value
-
-    def create(self, validated_data):
-        # Extract profile data
-        profile_data = {
-            'phone_number': validated_data.pop('phone_number'),
-            # 'street_address': validated_data.pop('street_address'),
-            # 'suburb': validated_data.pop('suburb'),
-            # 'city': validated_data.pop('city'),
-            'province_id': validated_data.pop('province_id'),
-        #     'postal_code': validated_data.pop('postal_code'),
-        #     'passport_number': validated_data.pop('passport_number', ''),
-        #     'kyc_document': validated_data.pop('kyc_document', ''),
-        #     'fica_document': validated_data.pop('fica_document', ''),
-        }
-        
-        # Get customer user type
-        customer_user_type = UserType.objects.get(name=constants.CUSTOMER)
-        
-        # Create user
-        user = User.objects.create_user(
-            user_type=customer_user_type,
-            **validated_data
-        )
-        
-        # Create profile
-        profile_data['province_id'] = profile_data.pop('province_id')
-        Profile.objects.create(user=user, **profile_data)
-        
-        # Create customer profile
-        Customer.objects.create(user=user, phone_number=profile_data['phone_number'])
-        
-        return user
 
 
 class CustomerProfileSerializer(serializers.ModelSerializer):
@@ -77,25 +13,17 @@ class CustomerProfileSerializer(serializers.ModelSerializer):
     email = serializers.CharField(source='user.email', read_only=True)
     first_name = serializers.CharField(source='user.first_name', read_only=True)
     last_name = serializers.CharField(source='user.last_name', read_only=True)
-    province_name = serializers.CharField(source='user.profile.province.name', read_only=True)
     kyc_status = serializers.CharField(source='user.profile.kyc_verified', read_only=True)
     kyc_verified_at = serializers.DateTimeField(source='user.profile.kyc_verified_at', read_only=True)
     aml_flagged = serializers.BooleanField(source='user.profile.aml_flagged', read_only=True)
-    
-    # Profile fields
-    # passport_number = serializers.CharField(source='user.profile.passport_number', read_only=True)
     phone_number = serializers.CharField(source='user.profile.phone_number', read_only=True)
-    # street_address = serializers.CharField(source='user.profile.street_address', read_only=True)
-    # suburb = serializers.CharField(source='user.profile.suburb', read_only=True)
-    # city = serializers.CharField(source='user.profile.city', read_only=True)
-    # postal_code = serializers.CharField(source='user.profile.postal_code', read_only=True)
+    
 
     class Meta:
         model = Customer
         fields = [
             'id', 'email', 'first_name', 'last_name', 'phone_number',
-            'street_address', 'suburb', 'city', 'province_name', 'postal_code',
-            'passport_number', 'kyc_status', 'kyc_verified_at', 'aml_flagged',
+            'kyc_status', 'kyc_verified_at', 'aml_flagged',
             'date_created'
         ]
 
@@ -107,7 +35,6 @@ class UpdateCustomerProfileSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=150, required=False)
     last_name = serializers.CharField(max_length=150, required=False)
     phone_number = serializers.CharField(max_length=20, required=False)
-    street_address = serializers.CharField(max_length=255, required=False)
     suburb = serializers.CharField(max_length=255, required=False)
     city = serializers.CharField(max_length=255, required=False)
     province_id = serializers.IntegerField(required=False)

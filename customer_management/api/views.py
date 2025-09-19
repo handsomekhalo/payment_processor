@@ -8,7 +8,7 @@ import json
 import random
 from requests import Response
 from crypto_payment_management.models import Customer, MerchantProfile, MerchantWallet, PaymentRequest, Stablecoin, Transaction
-from customer_management.api.serializers import CustomerProfileSerializer, CustomerRegistrationSerializer, KYCDocumentUploadSerializer, ProvinceSerializer, StablecoinSerializer, UpdateCustomerProfileSerializer
+from customer_management.api.serializers import CustomerProfileSerializer,KYCDocumentUploadSerializer, ProvinceSerializer, StablecoinSerializer, UpdateCustomerProfileSerializer
 from system_management import constants
 # from system_management.api.serializers import DeleteUserSerializer, GetAlltUserModelSerializer, RegisterSerializer, UserModelSerializer, UserTypeModelSerializer, UserUpdateSerializer,CreateUserSerializer
 from system_management.api.serializers import DeleteUserSerializer, GetAlltUserModelSerializer, CreateUserSerializer, UserModelSerializer, UserTypeModelSerializer, UserUpdateSerializer
@@ -43,29 +43,6 @@ from rest_framework.decorators import (
 # CUSTOMER ONBOARDING & REGISTRATION
 # ========================================
 
-@api_view(["POST"])
-@permission_classes([AllowAny])
-def customer_registration_api(request):
-    """
-    Register a new customer with basic profile information.
-    """
-    serializer = CustomerRegistrationSerializer(data=request.data)
-    if serializer.is_valid():
-        user = serializer.save()
-        return Response(
-            {
-                "status": "success",
-                "message": "Customer registered successfully. Please wait for KYC verification.",
-                "customer_id": user.id,
-                "email": user.email
-            },
-            status=status.HTTP_201_CREATED,
-        )
-    return Response(
-        {"status": "error", "errors": serializer.errors},
-        status=status.HTTP_400_BAD_REQUEST,
-    )
-
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
@@ -73,7 +50,9 @@ def get_provinces_api(request):
     """
     Get list of available provinces for registration.
     """
-    provinces = Province.objects.all().order_by('name')
+    # provinces = Province.objects.all().order_by('name')
+    provinces = Province.objects.all()
+
     serializer = ProvinceSerializer(provinces, many=True)
     return Response(
         {"status": "success", "provinces": serializer.data},
@@ -91,18 +70,22 @@ def get_customer_profile_api(request):
     """
     Get current customer's profile details.
     """
+    user_data = request.data
+    print('user_data',user_data)
     try:
-        customer = request.user.customer_profile
-        serializer = CustomerProfileSerializer(customer)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        customer = request.user.customer_profile  # only exists if user is a customer
     except Customer.DoesNotExist:
         return Response(
             {"status": "error", "message": "Customer profile not found"},
             status=status.HTTP_404_NOT_FOUND,
         )
 
+    serializer = CustomerProfileSerializer(customer)
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
-@api_view(["PUT"])
+
+
+@api_view(["POST", "PUT"])
 @permission_classes([IsAuthenticated])
 def update_customer_profile_api(request):
     """
@@ -110,26 +93,29 @@ def update_customer_profile_api(request):
     """
     try:
         customer = request.user.customer_profile
-        serializer = UpdateCustomerProfileSerializer(customer, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(
-                {
-                    "status": "success",
-                    "message": "Profile updated successfully",
-                    "profile": CustomerProfileSerializer(customer).data
-                },
-                status=status.HTTP_200_OK,
-            )
-        return Response(
-            {"status": "error", "errors": serializer.errors},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
     except Customer.DoesNotExist:
         return Response(
             {"status": "error", "message": "Customer profile not found"},
             status=status.HTTP_404_NOT_FOUND,
         )
+
+    serializer = UpdateCustomerProfileSerializer(customer, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(
+            {
+                "status": "success",
+                "message": "Profile updated successfully",
+                "profile": CustomerProfileSerializer(customer).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    return Response(
+        {"status": "error", "errors": serializer.errors},
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
 
 
 @api_view(["POST"])

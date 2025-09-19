@@ -145,13 +145,8 @@ def register_user_api(request):
             status=status.HTTP_201_CREATED,
         )
 
-    return Response(
-        {
-            "status": "error",
-            "errors": serializer.errors,
-        },
-        status=status.HTTP_400_BAD_REQUEST,
-    )
+    return Response({"status": "error", "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 @permission_classes([AllowAny])

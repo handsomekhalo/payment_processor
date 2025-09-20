@@ -8,7 +8,7 @@ import json
 import random
 from requests import Response
 from crypto_payment_management.models import Customer, MerchantProfile, MerchantWallet, PaymentRequest, Stablecoin, Transaction
-from customer_management.api.serializers import CustomerProfileSerializer,KYCDocumentUploadSerializer, ProvinceSerializer, StablecoinSerializer, UpdateCustomerProfileSerializer
+from customer_management.api.serializers import CustomerProfileSerializer,KYCDocumentUploadSerializer, PaymentRequestDetailSerializer, ProvinceSerializer, StablecoinSerializer, UpdateCustomerProfileSerializer
 from system_management import constants
 # from system_management.api.serializers import DeleteUserSerializer, GetAlltUserModelSerializer, RegisterSerializer, UserModelSerializer, UserTypeModelSerializer, UserUpdateSerializer,CreateUserSerializer
 from system_management.api.serializers import DeleteUserSerializer, GetAlltUserModelSerializer, CreateUserSerializer, UserModelSerializer, UserTypeModelSerializer, UserUpdateSerializer
@@ -68,22 +68,58 @@ def get_provinces_api(request):
 @permission_classes([IsAuthenticated])
 def get_customer_profile_api(request):
     """
-    Get current customer's profile details.
+    Get customer profile details.
+    - If the logged-in user is a customer, they can only view their own profile.
+    - If the logged-in user is admin/staff, they can query any customer profile by ID/user_id.
     """
-    user_data = request.data
-    print('user_data',user_data)
     try:
-        customer = request.user.customer_profile  # only exists if user is a customer
+        # Parse JSON body if present
+        body = {}
+        if request.body:
+            try:
+                body = json.loads(request.body)
+            except json.JSONDecodeError:
+                return Response(
+                    {"status": "error", "message": "Invalid JSON format"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        customer_id = body.get("id")
+        user_id = body.get("user_id")
+
+        # Case 1: Admin/Staff wants to view any profile
+        if (customer_id or user_id) and request.user.is_staff:
+            if customer_id:
+                customer = Customer.objects.get(id=customer_id)
+            else:
+                customer = Customer.objects.get(user_id=user_id)
+
+        # Case 2: Logged-in user is a customer (only fetch their own profile)
+        elif request.user.user_type.name.upper() == constants.CUSTOMER:
+            try:
+                customer = request.user.customer_profile
+            except Customer.DoesNotExist:
+                return Response(
+                    {"status": "error", "message": "Customer profile not found for this user"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        # Case 3: Non-staff, non-customer tries to query => forbidden
+        else:
+            return Response(
+                {"status": "error", "message": "Not authorized to view this profile"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
     except Customer.DoesNotExist:
         return Response(
             {"status": "error", "message": "Customer profile not found"},
             status=status.HTTP_404_NOT_FOUND,
         )
 
+    # Serialize and return
     serializer = CustomerProfileSerializer(customer)
     return Response(serializer.data, status=status.HTTP_200_OK)
-
-
 
 @api_view(["POST", "PUT"])
 @permission_classes([IsAuthenticated])
@@ -154,25 +190,32 @@ def get_kyc_status_api(request):
     Get customer's KYC verification status.
     """
     try:
-        profile = request.user.profile
+        customer = request.user.customer_profile  # ensure the user is a customer
+        profile = request.user.profile  # compliance info is still in Profile
+    except Customer.DoesNotExist:
         return Response(
-            {
-                "status": "success",
-                "kyc_status": {
-                    "kyc_verified": profile.kyc_verified,
-                    "kyc_verified_at": profile.kyc_verified_at,
-                    "aml_flagged": profile.aml_flagged,
-                    "kyc_document_uploaded": bool(profile.kyc_document),
-                    "fica_document_uploaded": bool(profile.fica_document),
-                }
-            },
-            status=status.HTTP_200_OK
+            {"status": "error", "message": "Customer profile not found"},
+            status=status.HTTP_404_NOT_FOUND,
         )
     except Profile.DoesNotExist:
         return Response(
             {"status": "error", "message": "Profile not found"},
             status=status.HTTP_404_NOT_FOUND,
         )
+
+    return Response(
+        {
+            "status": "success",
+            "kyc_status": {
+                "kyc_verified": profile.kyc_verified,
+                "kyc_verified_at": profile.kyc_verified_at,
+                "aml_flagged": profile.aml_flagged,
+                "kyc_document_uploaded": bool(profile.kyc_document),
+                "fica_document_uploaded": bool(profile.fica_document),
+            }
+        },
+        status=status.HTTP_200_OK
+    )
 
 
 # ========================================

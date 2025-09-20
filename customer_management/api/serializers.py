@@ -7,39 +7,51 @@ from system_management.models import Profile, Province, User, UserType
 
 
 class CustomerProfileSerializer(serializers.ModelSerializer):
-    """
-    Serializer for customer profile details
-    """
-    email = serializers.CharField(source='user.email', read_only=True)
-    first_name = serializers.CharField(source='user.first_name', read_only=True)
-    last_name = serializers.CharField(source='user.last_name', read_only=True)
-    kyc_status = serializers.CharField(source='user.profile.kyc_verified', read_only=True)
-    kyc_verified_at = serializers.DateTimeField(source='user.profile.kyc_verified_at', read_only=True)
-    aml_flagged = serializers.BooleanField(source='user.profile.aml_flagged', read_only=True)
-    phone_number = serializers.CharField(source='user.profile.phone_number', read_only=True)
-    
+    # User fields
+    first_name = serializers.CharField(source="user.first_name", read_only=True)
+    last_name = serializers.CharField(source="user.last_name", read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
+
+    # Customer field
+    phone_number = serializers.CharField(read_only=True)
+
+    # Profile fields
+    kyc_status = serializers.BooleanField(source="user.profile.kyc_verified", read_only=True)
+    kyc_verified_at = serializers.DateTimeField(source="user.profile.kyc_verified_at", read_only=True)
+    aml_flagged = serializers.BooleanField(source="user.profile.aml_flagged", read_only=True)
 
     class Meta:
         model = Customer
         fields = [
-            'id', 'email', 'first_name', 'last_name', 'phone_number',
-            'kyc_status', 'kyc_verified_at', 'aml_flagged',
-            'date_created'
+            "id",
+            "email",
+            "first_name",
+            "last_name",
+            "phone_number",
+            "kyc_status",
+            "kyc_verified_at",
+            "aml_flagged",
+            "date_created",
         ]
 
 
 class UpdateCustomerProfileSerializer(serializers.Serializer):
-    """
-    Serializer for updating customer profile
-    """
     first_name = serializers.CharField(max_length=150, required=False)
     last_name = serializers.CharField(max_length=150, required=False)
+    email = serializers.EmailField(required=False)
+
+    # Customer fields
     phone_number = serializers.CharField(max_length=20, required=False)
+
+    # Profile fields
+    province_id = serializers.IntegerField(required=False)
+    street_address = serializers.CharField(max_length=255, required=False)
     suburb = serializers.CharField(max_length=255, required=False)
     city = serializers.CharField(max_length=255, required=False)
-    province_id = serializers.IntegerField(required=False)
     postal_code = serializers.CharField(max_length=10, required=False)
     passport_number = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    kyc_verified = serializers.BooleanField(required=False)
+    aml_flagged = serializers.BooleanField(required=False)
 
     def validate_province_id(self, value):
         if value and not Province.objects.filter(id=value).exists():
@@ -47,31 +59,40 @@ class UpdateCustomerProfileSerializer(serializers.Serializer):
         return value
 
     def update(self, instance, validated_data):
-        # Update user fields
-        user_fields = ['first_name', 'last_name']
+        """
+        instance = Customer
+        instance.user = User
+        instance.user.profile = Profile
+        """
+        # --- User fields ---
+        user_fields = ['first_name', 'last_name', 'email']
         for field in user_fields:
             if field in validated_data:
                 setattr(instance.user, field, validated_data.pop(field))
         instance.user.save()
 
-        # Update profile fields
-        profile_fields = ['phone_number', 'street_address', 'suburb', 'city', 'postal_code', 'passport_number']
+        # --- Customer fields ---
+        if 'phone_number' in validated_data:
+            instance.phone_number = validated_data.pop('phone_number')
+            instance.save()
+
+        # --- Profile fields ---
         profile = instance.user.profile
+        profile_fields = [
+            'street_address', 'suburb', 'city', 'postal_code',
+            'passport_number', 'kyc_verified', 'aml_flagged'
+        ]
         for field in profile_fields:
             if field in validated_data:
                 setattr(profile, field, validated_data.pop(field))
-        
+
         if 'province_id' in validated_data:
             profile.province_id = validated_data.pop('province_id')
-        
+
         profile.save()
 
-        # Update customer phone number if changed
-        if 'phone_number' in validated_data:
-            instance.phone_number = profile.phone_number
-            instance.save()
-
         return instance
+
 
 
 class StablecoinSerializer(serializers.ModelSerializer):

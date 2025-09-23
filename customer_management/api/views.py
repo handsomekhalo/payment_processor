@@ -239,33 +239,67 @@ def get_available_stablecoins_api(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_payment_request_api(request, request_id):
+
+
+    cust_data = request.data
+    
+    print('cust_data',cust_data)
     """
     Get payment request details by QR code or request ID.
     """
     try:
+        # Ensure the caller is a customer
+        customer = request.user.customer_profile  
+        profile = request.user.profile  
+
         # Check if customer is KYC verified
-        if not request.user.profile.kyc_verified:
+        if not profile.kyc_verified:
             return Response(
                 {"status": "error", "message": "KYC verification required to make payments"},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        
+
+
         payment_request = PaymentRequest.objects.select_related(
-            'merchant', 'merchant__profile', 'stablecoin', 'wallet'
-        ).get(request_id=request_id, status='OPEN')
-        
-        # Check if payment request is expired
+            "merchant", "merchant__profile", "stablecoin", "wallet"
+        ).filter(request_id=request_id).first()
+
+        if not payment_request:
+            return Response(
+                {"status": "error", "message": f"Payment request {request_id} not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Check if it's already expired in the database
+        if payment_request.status == "EXPIRED":
+            return Response(
+                {"status": "error", "message": "Payment request has already expired"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check if it should be expired based on time
         if payment_request.expires_at < timezone.now():
-            payment_request.status = 'EXPIRED'
+            payment_request.status = "EXPIRED"
             payment_request.save()
             return Response(
                 {"status": "error", "message": "Payment request has expired"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
+        # Check if it's not OPEN status
+        if payment_request.status != "OPEN":
+            return Response(
+                {"status": "error", "message": f"Payment request is {payment_request.status} and cannot be processed"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         serializer = PaymentRequestDetailSerializer(payment_request)
         return Response(serializer.data, status=status.HTTP_200_OK)
-        
+
+    except Customer.DoesNotExist:
+        return Response(
+            {"status": "error", "message": "Customer profile not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
     except PaymentRequest.DoesNotExist:
         return Response(
             {"status": "error", "message": "Payment request not found or already processed"},
@@ -280,41 +314,47 @@ def create_transaction_api(request):
     Create a transaction after customer makes payment.
     """
     try:
-        # Check if customer is KYC verified
-        if not request.user.profile.kyc_verified:
+        # Ensure the caller is a customer
+        customer = request.user.customer_profile
+        profile = request.user.profile  
+
+        # Check KYC
+        if not profile.kyc_verified:
             return Response(
                 {"status": "error", "message": "KYC verification required to make payments"},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        
-        # Check if customer is AML flagged
-        if request.user.profile.aml_flagged:
+
+        # Check AML
+        if profile.aml_flagged:
             return Response(
                 {"status": "error", "message": "Account flagged for review. Contact support."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        
-        serializer = CreateTransactionSerializer(data=request.data, context={'request': request})
+
+        serializer = CreateTransactionSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
             transaction = serializer.save()
-            
+
             # Update payment request status
             payment_request = transaction.payment_request
-            payment_request.status = 'PAID'
+            payment_request.status = "PAID"
             payment_request.save()
-            
+
             return Response(
                 {
                     "status": "success",
                     "message": "Transaction created successfully",
-                    "transaction": TransactionSerializer(transaction).data
+                    "transaction": TransactionSerializer(transaction).data,
                 },
                 status=status.HTTP_201_CREATED,
             )
+
         return Response(
             {"status": "error", "errors": serializer.errors},
             status=status.HTTP_400_BAD_REQUEST,
         )
+
     except Customer.DoesNotExist:
         return Response(
             {"status": "error", "message": "Customer profile not found"},

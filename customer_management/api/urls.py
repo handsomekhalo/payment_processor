@@ -13,6 +13,8 @@ urlpatterns = [
     path('get_kyc_status_api/', views.get_kyc_status_api, name='get_kyc_status_api'),
     path('upload_kyc_document_api/', views.upload_kyc_document_api, name="upload_kyc_document_api"),
     path('get_available_stablecoins_api/', views.get_available_stablecoins_api, name='get_available_stablecoins_api'),
+    # path('get_payment_request_api/<int:request_id>/', views.get_payment_request_api, name="get_payment_request_api"),
+    path('get_payment_request_api/<str:request_id>/', views.get_payment_request_api, name="get_payment_request_api"),
 
     # path('get_merchant_profile_api/<int:merchant_id>/', views.get_merchant_profile_api, name='get_merchant_profile_api'),
 

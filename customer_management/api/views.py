@@ -8,7 +8,7 @@ import json
 import random
 from requests import Response
 from crypto_payment_management.models import Customer, MerchantProfile, MerchantWallet, PaymentRequest, Stablecoin, Transaction
-from customer_management.api.serializers import CustomerProfileSerializer,KYCDocumentUploadSerializer, PaymentRequestDetailSerializer, ProvinceSerializer, StablecoinSerializer, UpdateCustomerProfileSerializer
+from customer_management.api.serializers import CustomerProfileSerializer, CustomerWalletSerializer,KYCDocumentUploadSerializer, PaymentRequestDetailSerializer, ProvinceSerializer, StablecoinSerializer, UpdateCustomerProfileSerializer
 from system_management import constants
 # from system_management.api.serializers import DeleteUserSerializer, GetAlltUserModelSerializer, RegisterSerializer, UserModelSerializer, UserTypeModelSerializer, UserUpdateSerializer,CreateUserSerializer
 from system_management.api.serializers import DeleteUserSerializer, GetAlltUserModelSerializer, CreateUserSerializer, UserModelSerializer, UserTypeModelSerializer, UserUpdateSerializer
@@ -240,10 +240,6 @@ def get_available_stablecoins_api(request):
 @permission_classes([IsAuthenticated])
 def get_payment_request_api(request, request_id):
 
-
-    cust_data = request.data
-    
-    print('cust_data',cust_data)
     """
     Get payment request details by QR code or request ID.
     """
@@ -333,10 +329,13 @@ def create_transaction_api(request):
             )
 
         serializer = CreateTransactionSerializer(data=request.data, context={"request": request})
+        print('serializer', serializer)
         if serializer.is_valid():
+            print('valid seriqlizer')
             transaction = serializer.save()
 
-            # Update payment request status
+          
+
             payment_request = transaction.payment_request
             payment_request.status = "PAID"
             payment_request.save()

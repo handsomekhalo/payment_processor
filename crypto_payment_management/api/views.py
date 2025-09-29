@@ -389,18 +389,18 @@ def delete_payment_request_api(request, pk):
         return Response({"status": "error", "message": "Payment request not found"}, status=status.HTTP_404_NOT_FOUND)
     
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def create_transaction_api(request):
-    """
-    Create a transaction manually (useful for testing or manual reconciliation).
-    """
-    serializer = CreateTransactionSerializer(data=request.data)
-    if serializer.is_valid():
-        tx = serializer.save()
-        return Response({"status": "success", "transaction": TransactionSerializer(tx).data},
-                        status=status.HTTP_201_CREATED)
-    return Response({"status": "error", "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+# @api_view(["POST"])
+# @permission_classes([IsAuthenticated])
+# def create_transaction_api(request):
+#     """
+#     Create a transaction manually (useful for testing or manual reconciliation).
+#     """
+#     serializer = CreateTransactionSerializer(data=request.data)
+#     if serializer.is_valid():
+#         tx = serializer.save()
+#         return Response({"status": "success", "transaction": TransactionSerializer(tx).data},
+#                         status=status.HTTP_201_CREATED)
+#     return Response({"status": "error", "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["GET"])

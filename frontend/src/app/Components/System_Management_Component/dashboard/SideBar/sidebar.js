@@ -29,10 +29,18 @@ const Sidebar = () => {
     },
 
     {
-      title: 'Manage Transactions',
+      title: 'Manage Finances',
       links: [
         {  href: '/Components/Transactions_Components/', 
-            icon: 'bx bx-user', label: 'Transact' } // Link to /users page
+            icon: 'bx bx-user', label: 'Transact' },
+
+        {  href: '/Components/Accounts_Components/', 
+            icon: 'bx bx-user', label: 'Accounts' }, 
+            
+            
+        {  href: '/Components/Wallets_Components/', 
+            icon: 'bx bx-user', label: 'Wallets' },// Link to /users page // Link to /users page
+            
       
   
       ],

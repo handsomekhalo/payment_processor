@@ -93,3 +93,6 @@ venv/
 # Environment files
 .env
 payment_venv
+
+#Ignore vscode AI rules
+.github\instructions\codacy.instructions.md

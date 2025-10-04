@@ -2,8 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils.translation import gettext_lazy as _
-from . import constants  # define constants.ADMIN, MERCHANT, CUSTOMER, etc.
-
+from . import constants
 
 class UserType(models.Model):
     """
@@ -17,30 +16,29 @@ class UserType(models.Model):
     def __str__(self):
         return self.name
 
-
 class UserManager(BaseUserManager):
-    def create_user(self, email, password, first_name, last_name, **extra_fields):
+    def create_user(self, email, password, **extra_fields):
         if not email:
             raise ValueError(_('The Email must be set'))
+        
         email = self.normalize_email(email)
-        extra_fields.setdefault('is_active', True)
-        user = self.model(email=email, first_name=first_name, last_name=last_name, **extra_fields)
+        user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
         return user
 
     def create_superuser(self, email, password, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        extra_fields.setdefault('is_active', True)
+
         try:
-            user_type_id = UserType.objects.get(name=constants.ADMIN).id
+            admin_user_type = UserType.objects.get(name=constants.ADMIN)
+            extra_fields.setdefault('user_type', admin_user_type)
         except ObjectDoesNotExist:
             raise ValueError(_(f'{constants.ADMIN} role not found'))
-        extra_fields.update({
-            'is_staff': True,
-            'is_superuser': True,
-            'user_type_id': user_type_id
-        })
-        return self.create_user(email, password, first_name="Super", last_name="Admin", **extra_fields)
-
+        
+        return self.create_user(email, password, **extra_fields)
 
 class User(AbstractUser):
     """
@@ -49,8 +47,13 @@ class User(AbstractUser):
     username = None
     email = models.EmailField(unique=True)
     user_type = models.ForeignKey(UserType, on_delete=models.CASCADE)
-    user_created_by = models.ForeignKey('self', null=True, blank=True,
-                                        on_delete=models.SET_NULL, related_name='created_users')
+    user_created_by = models.ForeignKey(
+        'self', 
+        null=True, 
+        blank=True,
+        on_delete=models.SET_NULL, 
+        related_name='created_users'
+    )
 
     objects = UserManager()
     USERNAME_FIELD = 'email'
@@ -58,42 +61,6 @@ class User(AbstractUser):
 
     def __str__(self):
         return f"{self.email} ({self.user_type})"
-
-
-class Profile(models.Model):
-    """
-    Profile stores identity, contact, and compliance details for KYC/AML.
-    """
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
-    
-    # Personal details (Customers & Admins)
-    id_number = models.CharField(max_length=13, null=True, blank=True)
-    passport_number = models.CharField(max_length=255, null=True, blank=True)
-    phone_number = models.CharField(max_length=20)
-    
-    # Address (for KYC/FICA)
-    street_address = models.CharField(max_length=255)
-    suburb = models.CharField(max_length=255)
-    city = models.CharField(max_length=255)
-    province = models.CharField(max_length=255)
-    postal_code = models.CharField(max_length=10, default="")
-    
-    # Merchant-specific details
-    business_name = models.CharField(max_length=255, null=True, blank=True)
-    business_registration_number = models.CharField(max_length=100, null=True, blank=True)
-    vat_number = models.CharField(max_length=100, null=True, blank=True)
-    
-    # KYC/AML compliance
-    kyc_verified = models.BooleanField(default=False)
-    aml_flagged = models.BooleanField(default=False)
-    
-    date_created = models.DateTimeField(auto_now_add=True)
-    date_modified = models.DateTimeField(auto_now=True)
-    first_login = models.BooleanField(default=False)
-
-    def __str__(self):
-        return f"{self.user.email} Profile"
-
 
 class Province(models.Model):
     """
@@ -103,3 +70,41 @@ class Province(models.Model):
 
     def __str__(self):
         return self.name
+
+class Profile(models.Model):
+    """
+    Profile stores identity, contact, and compliance details for KYC/AML.
+    """
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
+    
+    # Personal details (Customers & Admins)
+    passport_number = models.CharField(max_length=255, null=True, blank=True)
+    phone_number = models.CharField(max_length=20)
+    
+    # Address (for KYC/FICA)
+    street_address = models.CharField(max_length=255)
+    suburb = models.CharField(max_length=255)
+    city = models.CharField(max_length=255)
+    province = models.ForeignKey(Province, on_delete=models.SET_NULL, null=True)
+    postal_code = models.CharField(max_length=10, default="")
+    
+    # Merchant-specific details
+    business_name = models.CharField(max_length=255, null=True, blank=True)
+    business_registration_number = models.CharField(max_length=100, null=True, blank=True)
+    vat_number = models.CharField(max_length=100, null=True, blank=True)
+    
+    # Compliance documents (store metadata or S3 URLs, not raw files)
+    kyc_document = models.CharField(max_length=255, null=True, blank=True)  # e.g., S3 URL for ID scan
+    fica_document = models.CharField(max_length=255, null=True, blank=True)  # e.g., S3 URL for proof of address
+    
+    # KYC/AML compliance
+    kyc_verified = models.BooleanField(default=False)
+    kyc_verified_at = models.DateTimeField(null=True, blank=True)
+    aml_flagged = models.BooleanField(default=False)
+    
+    date_created = models.DateTimeField(auto_now_add=True)
+    date_modified = models.DateTimeField(auto_now=True)
+    first_login = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.user.email} Profile"

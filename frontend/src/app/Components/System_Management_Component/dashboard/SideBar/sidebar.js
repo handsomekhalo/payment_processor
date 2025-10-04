@@ -46,6 +46,18 @@ const Sidebar = () => {
       ],
       
     },
+      {
+      title: 'Profile Management',
+      links: [
+        {  href: '/Components/Profile_Management_Component/', 
+            icon: 'bx bx-profilw', label: 'View Prifile' } // Link to /users page
+      
+  
+      ],
+      
+    },
+
+
    
     
   ];
